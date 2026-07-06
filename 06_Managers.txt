@@ -1,0 +1,481 @@
+Managers
+========
+
+GameManager (NetworkBehaviourSingleton<GameManager>)
+-----------------------------------------------------
+The central game state manager. Synchronized across all clients.
+
+  GameManager.Instance.GameState   // NetworkVariable<GameState>
+  GameManager.Instance.Phase       // GamePhase (convenience from GameState)
+  GameManager.Instance.Tick        // int (current game tick)
+  GameManager.Instance.Period      // int (current period, 1-indexed)
+  GameManager.Instance.BlueScore   // int
+  GameManager.Instance.RedScore    // int
+  GameManager.Instance.IsOvertime  // bool
+
+GameState
+---------
+  struct GameState
+  {
+      GamePhase Phase;
+      int Tick;
+      int Period;
+      int BlueScore;
+      int RedScore;
+      bool IsOvertime;
+  }
+
+Listen for changes via:
+  GameManager.Instance.GameState.OnValueChanged += (old, newVal) =>
+  {
+      Debug.Log($"Phase: {newVal.Phase}, Score: {newVal.BlueScore}-{newVal.RedScore}");
+  };
+
+Or via the event system:
+  EventManager.AddEventListener("Event_Everyone_OnGameStateChanged", handler);
+
+PlayerManager (MonoBehaviourSingleton<PlayerManager>)
+-----------------------------------------------------
+Manages all Player objects in the game. Use this for player lookups and queries.
+
+  PlayerManager.Instance.GetPlayers(bool includeReplay = false)
+  PlayerManager.Instance.GetPlayersByPhase(PlayerPhase phase)
+  PlayerManager.Instance.GetPlayersByTeam(PlayerTeam team)
+  PlayerManager.Instance.GetPlayersByTeams(PlayerTeam[] teams)
+  PlayerManager.Instance.GetPlayerByClientId(ulong clientId)
+  PlayerManager.Instance.GetPlayerByUsername(FixedString32Bytes username)
+  PlayerManager.Instance.GetPlayerByNumber(int number)
+  PlayerManager.Instance.GetPlayerBySteamId(FixedString32Bytes steamId)
+  PlayerManager.Instance.GetPlayerByNeedle(string needle)
+  PlayerManager.Instance.GetLocalPlayer()
+  PlayerManager.Instance.GetSpawnedPlayers(bool includeReplay = false)
+  PlayerManager.Instance.GetSpawnedPlayersByTeam(PlayerTeam team)
+  PlayerManager.Instance.GetReplayPlayers()
+
+GetPlayerByNeedle() accepts partial matches against username or player number,
+useful for implementing chat commands like "/msg playerName".
+
+GetLocalPlayer() is the most common accessor - it returns the local user's
+Player instance. On a dedicated server, this returns null (no local player).
+
+PuckManager (MonoBehaviourSingleton<PuckManager>)
+--------------------------------------------------
+  PuckManager.Instance    // Singleton instance
+
+  // Queries
+  puckManager.GetPucks(bool includeReplay = false)   // List<Puck>
+  puckManager.GetPuck(bool includeReplay = false)    // First non-replay puck
+  puckManager.GetReplayPucks()                       // List<Puck>
+  puckManager.GetPuckByNetworkObjectId(ulong id)     // Puck by NetworkObjectId
+  puckManager.GetReplayPuckByNetworkObjectId(ulong id)
+  puckManager.GetPlayerPuck(ulong clientId)          // Puck currently touching player's stick
+  puckManager.AddPuckPosition(PuckPosition puckPos)
+  puckManager.RemovePuckPosition(PuckPosition puckPos)
+
+  // Server-only
+  puckManager.Server_SpawnPuck(Vector3 pos, Quaternion rot, bool isReplay = false)
+  puckManager.Server_DespawnPuck(Puck puck)
+  puckManager.Server_DespawnPucks(bool includeReplay = false)
+  puckManager.Server_SpawnPucksForPhase(GamePhase phase)  // spawns for each PuckPosition
+
+GetPlayerPuck() returns the first puck in the collision buffer of the player's stick,
+useful for "who has the puck" queries or pass detection.
+
+ChatManager (NetworkBehaviourSingleton<ChatManager>)
+-----------------------------------------------------
+  ChatManager.Instance    // Singleton instance
+
+  // Client methods
+  chatManager.Client_SendChatMessage(string content, bool isQuickChat, bool isTeamChat)
+  chatManager.Client_QuickChatAction(int index)
+  chatManager.SetQuickChatEnabled(bool enabled, QuickChatCategory? category = null)
+
+  // Server methods
+  chatManager.Server_SendChatMessage(ChatMessage msg, params ulong[] clientIds)
+  chatManager.Server_SendChatMessage(string content, string color, params ulong[] clientIds)
+  chatManager.Server_BroadcastChatMessage(ChatMessage msg)
+  chatManager.Server_BroadcastChatMessage(string content, string color = null)
+
+  // Local-only
+  chatManager.AddChatMessage(ChatMessage msg)
+  chatManager.RemoveChatMessage(ChatMessage msg)
+  chatManager.ClearChatMessages()
+  chatManager.ParseChatMessageContent(string content)  // trims/clamps to max length
+
+Server methods send messages over the network via RPCs. The string+color overload
+creates a system message wrapped in a rich text color tag (e.g. "#b8b8b8", "#e74c3c").
+Broadcast variants send to every connected client; the params overload targets
+specific client IDs.
+
+ChatMessage
+-----------
+  struct ChatMessage : INetworkSerializable
+  {
+      FixedString32Bytes SteamID;
+      FixedString32Bytes Username;
+      PlayerTeam? Team;
+      FixedString32Bytes Content;
+      double Timestamp;
+      bool IsQuickChat;
+      bool IsTeamChat;
+      bool IsSystem;
+  }
+
+ChatCommandInfo
+---------------
+  readonly struct ChatCommandInfo(string usage, string description, int requiredAdminLevel = 0)
+  {
+      readonly string Usage;
+      readonly string Description;
+      readonly int RequiredAdminLevel;
+  }
+
+Defines a chat command for the in-game /help command. Override GetChatCommands()
+in your BaseGameMode subclass to register custom commands:
+
+SettingsManager
+---------------
+All settings are static fields. When changed, they trigger Event_On* events.
+Mods can read settings but should avoid writing them without user consent.
+
+  // Gameplay
+  SettingsManager.CameraAngle             // float - default 30
+  SettingsManager.Handedness              // PlayerHandedness - default Right
+  SettingsManager.ShowPuckSilhouette      // bool - default true
+  SettingsManager.ShowPuckElevation       // bool - default true
+  SettingsManager.Units                   // Units (Metric/Imperial)
+  SettingsManager.GlobalStickSensitivity  // float - default 0.2
+  SettingsManager.HorizontalStickSensitivity
+  SettingsManager.VerticalStickSensitivity
+  SettingsManager.LookSensitivity         // float - default 0.2
+  SettingsManager.Fov                     // float - default 90
+  SettingsManager.Team                    // PlayerTeam - default Blue
+  SettingsManager.Role                    // PlayerRole - default Attacker
+
+  // Audio
+  SettingsManager.GlobalVolume
+  SettingsManager.AmbientVolume
+  SettingsManager.GameVolume
+  SettingsManager.VoiceVolume
+  SettingsManager.UIVolume
+
+  // Video
+  SettingsManager.FullScreenMode
+  SettingsManager.DisplayIndex
+  SettingsManager.ResolutionIndex
+  SettingsManager.VSync
+  SettingsManager.FpsLimit
+  SettingsManager.Quality
+  SettingsManager.ShadowQuality
+  SettingsManager.MotionBlur
+
+  // Customization IDs
+  SettingsManager.FlagID
+  SettingsManager.HeadgearIDBlueAttacker
+  SettingsManager.HeadgearIDRedAttacker
+  SettingsManager.HeadgearIDBlueGoalie
+  SettingsManager.HeadgearIDRedGoalie
+  SettingsManager.JerseyIDBlueAttacker
+  SettingsManager.JerseyIDRedAttacker
+  SettingsManager.JerseyIDBlueGoalie
+  SettingsManager.JerseyIDRedGoalie
+  SettingsManager.StickSkinIDBlueAttacker
+  SettingsManager.StickSkinIDRedAttacker
+  SettingsManager.StickSkinIDBlueGoalie
+  SettingsManager.StickSkinIDRedGoalie
+  SettingsManager.StickShaftTapeIDBlueAttacker
+  SettingsManager.StickShaftTapeIDRedAttacker
+  SettingsManager.StickShaftTapeIDBlueGoalie
+  SettingsManager.StickShaftTapeIDRedGoalie
+  SettingsManager.StickBladeTapeIDBlueAttacker
+  SettingsManager.StickBladeTapeIDRedAttacker
+  SettingsManager.StickBladeTapeIDBlueGoalie
+  SettingsManager.StickBladeTapeIDRedGoalie
+
+InputManager
+------------
+All input actions are static fields. Use these to read current input state or
+rebind keys.
+
+  // Movement
+  InputManager.MoveForwardAction
+  InputManager.MoveBackwardAction
+  InputManager.TurnLeftAction
+  InputManager.TurnRightAction
+
+  // Stick
+  InputManager.StickAction           // Reads Vector2 value
+  InputManager.BladeAngleUpAction
+  InputManager.BladeAngleDownAction
+
+  // Actions
+  InputManager.SlideAction
+  InputManager.SprintAction
+  InputManager.TrackAction
+  InputManager.LookAction
+  InputManager.JumpAction
+  InputManager.StopAction
+  InputManager.TwistLeftAction
+  InputManager.TwistRightAction
+  InputManager.DashLeftAction
+  InputManager.DashRightAction
+  InputManager.ExtendLeftAction
+  InputManager.ExtendRightAction
+  InputManager.LateralLeftAction
+  InputManager.LateralRightAction
+  InputManager.TalkAction
+
+  // UI
+  InputManager.AllChatAction
+  InputManager.TeamChatAction
+  InputManager.PauseAction
+  InputManager.PositionSelectAction
+  InputManager.ScoreboardAction
+  InputManager.PointAction
+  InputManager.ClickAction
+
+  // Quick Chat
+  InputManager.QuickChat1Action ... QuickChat5Action
+
+  // Debug
+  InputManager.Debug1Action ... Debug4Action
+
+  // Key binding
+  InputManager.RebindableInputActions  // List<InputAction>
+  InputManager.RebindAction(string actionName, string modifierPath, string path)
+  InputManager.SaveKeyBinds()
+  InputManager.LoadKeyBinds()
+
+Each action exposes a ReadValue<T>() method to get current input state:
+  Vector2 stickInput = InputManager.StickAction.ReadValue<Vector2>();
+  bool isSprinting = InputManager.SprintAction.ReadValue<float>() > 0.5f;
+
+SaveManager
+-----------
+Wraps Unity's PlayerPrefs. Use this for persisting mod configuration.
+
+  SaveManager.SetBool(string key, bool value)
+  SaveManager.GetBool(string key, bool defaultValue)
+  SaveManager.SetInt(string key, int value)
+  SaveManager.GetInt(string key, int defaultValue)
+  SaveManager.SetFloat(string key, float value)
+  SaveManager.GetFloat(string key, float defaultValue)
+  SaveManager.SetString(string key, string value)
+  SaveManager.GetString(string key, string defaultValue)
+  SaveManager.SetEnum<T>(string key, T value)
+  SaveManager.GetEnum<T>(string key, T defaultValue)
+
+Best practice: Prefix your keys with a unique mod identifier:
+  SaveManager.SetFloat("myMod_volume", 0.75f);
+  float vol = SaveManager.GetFloat("myMod_volume", 0.75f);
+
+ItemManager
+-----------
+  ItemManager.Items           // List<Item>
+  ItemManager.GetItemById(int id)
+  ItemManager.GetItemsByCategories(string[] categories)
+  ItemManager.IsItemOwned(int itemId, PlayerData playerData)
+
+Item
+----
+  item.id
+  item.name
+  item.description
+  item.categories    // string[] - "flag", "headgear", "jersey", "stickSkin", etc.
+  item.price
+  item.code
+  item.IsFlag / IsHeadgear / IsJersey / IsMustache / IsBeard
+  item.IsStickSkin / IsStickShaftTape / IsStickBladeTape
+  item.IsAttackerItem / item.IsGoalieItem
+  item.IsOwned / item.IsPurchased
+
+Items are cosmetic unlocks (flags, jerseys, stick skins, etc.). Categories
+determine which slot an item equips to. Use ItemManager.GetItemsByCategories()
+to filter by type.
+
+UIManager (MonoBehaviourSingleton<UIManager>)
+----------------------------------------------
+Central access point for all UI views and root elements.
+
+  UIManager.Instance.RootVisualElement     // VisualElement (UI Toolkit root)
+  UIManager.Instance.PanelSettings         // PanelSettings
+  UIManager.Instance.AudioSource           // AudioSource for UI sounds
+
+  // UI Views
+  UIManager.Instance.MainMenu             // UIMainMenu
+  UIManager.Instance.PauseMenu            // UIPauseMenu
+  UIManager.Instance.ServerBrowser        // UIServerBrowser
+  UIManager.Instance.Chat                 // UIChat
+  UIManager.Instance.TeamSelect           // UITeamSelect
+  UIManager.Instance.PositionSelect       // UIPositionSelect
+  UIManager.Instance.Scoreboard           // UIScoreboard
+  UIManager.Instance.Settings             // UISettings
+  UIManager.Instance.Hud                  // UIHUD
+  UIManager.Instance.Announcements        // UIAnnouncements
+  UIManager.Instance.Minimap              // UIMinimap
+  UIManager.Instance.NewServer            // UINewServer
+  UIManager.Instance.DirectConnect        // UIDirectConnect
+  UIManager.Instance.ToastManager         // UIToastManager
+  UIManager.Instance.OverlayManager       // UIOverlayManager
+  UIManager.Instance.PlayerMenu           // UIPlayerMenu
+  UIManager.Instance.Identity             // UIIdentity
+  UIManager.Instance.Appearance           // UIAppearance
+  UIManager.Instance.PopupManager         // UIPopupManager
+  UIManager.Instance.Usernames            // UIUsernames
+  UIManager.Instance.Debug                // UIDebug
+  UIManager.Instance.Mods                 // UIMods
+  UIManager.Instance.Footer               // UIFooter
+  UIManager.Instance.Friends              // UIFriends
+  UIManager.Instance.Play                 // UIPlay
+  UIManager.Instance.Matchmaking          // UIMatchmaking
+  UIManager.Instance.GameState            // UIGameState
+
+  // Methods
+  UIManager.Instance.PlaySelectSound()
+  UIManager.Instance.PlayClickSound()
+  UIManager.Instance.PlayNotificationSound()
+
+ConnectionManager (MonoBehaviourSingleton<ConnectionManager>)
+-------------------------------------------------------------
+Manages client connections to remote servers.
+
+  // Properties
+  connectionManager.UnityTransport  // UnityTransport component
+
+  // Client methods
+  connectionManager.Client_StartClient(string ipAddress, ushort port, string password = null)
+
+Client_StartClient initiates a connection to the given IP and port. If already
+connected to another server, it disconnects first. The password is optional and
+sent alongside the player's ConnectionData.
+
+ServerManager (NetworkBehaviourSingleton<ServerManager>)
+---------------------------------------------------------
+The host/server manager. Controls server lifecycle, manages admin/ban/whitelist
+functionality, and provides port forwarding support.
+
+  // Sub-managers
+  serverManager.EdgegapManager              // EdgegapManager (dedicated server orchestration)
+  serverManager.ConnectionApprovalManager   // ConnectionApprovalManager
+  serverManager.TimeoutManager              // TimeoutManager
+  serverManager.BanManager                  // BanManager
+  serverManager.AdminManager                // AdminManager
+  serverManager.WhitelistManager            // WhitelistManager
+  serverManager.ServerConfig                // ServerConfig
+  serverManager.TcpServer                   // TCPServer (server browser preview)
+  serverManager.IpAddress
+  serverManager.IsHostStartInProgress
+
+  // Server lifecycle
+  serverManager.StartHost(ushort port, string name, int maxPlayers, string password, bool isPublic, bool useVoip, bool forwardPorts = false)
+  serverManager.StartServer(ushort port, bool forwardPorts = false)
+  serverManager.StartTcpServer(ushort port)       // LAN server browser discovery
+  serverManager.StopTcpServer()
+  serverManager.HandleStartFailure()              // Called on port conflict
+  serverManager.Authenticate()                    // Registers with Puck backend
+  serverManager.Unauthenticate()                  // Unregisters from Puck backend
+  serverManager.StartPortForwarding(ushort port)
+  serverManager.StopPortForwarding()
+
+  // Moderation
+  serverManager.Server_KickPlayer(Player player, DisconnectionCode code = Kicked, string message = null, bool applyTimeout = true)
+  serverManager.Server_BanPlayer(Player player)
+  serverManager.Server_BanSteamId(string steamId)
+  serverManager.Server_UnbanSteamId(string steamId)
+  serverManager.Server_IsSteamIdBanned(string steamId)
+
+StartHost creates a listen server and also joins as a client (for local play).
+StartServer creates a dedicated server instance. TCP server is optional and used
+for LAN server browser discovery so other clients can see server name/player count.
+
+ConnectionData
+--------------
+  class ConnectionData
+  {
+      string SteamId;
+      string Key;
+      string Password;
+      string[] EnabledModIds;
+      PlayerHandedness Handedness;
+      int FlagID;
+      int HeadgearIDBlueAttacker, HeadgearIDRedAttacker;
+      int HeadgearIDBlueGoalie, HeadgearIDRedGoalie;
+      int MustacheID, BeardID;
+      int JerseyIDBlueAttacker, JerseyIDRedAttacker;
+      int JerseyIDBlueGoalie, JerseyIDRedGoalie;
+      int StickSkinIDBlueAttacker, StickSkinIDRedAttacker;
+      int StickSkinIDBlueGoalie, StickSkinIDRedGoalie;
+      int StickShaftTapeIDBlueAttacker, StickShaftTapeIDRedAttacker;
+      int StickShaftTapeIDBlueGoalie, StickShaftTapeIDRedGoalie;
+      int StickBladeTapeIDBlueAttacker, StickBladeTapeIDRedAttacker;
+      int StickBladeTapeIDBlueGoalie, StickBladeTapeIDRedGoalie;
+  }
+
+ConnectionRejectionCode
+-----------------------
+  Unreachable, ServerFull, TimedOut, Banned, NotWhitelisted,
+  MissingPassword, InvalidPassword, MissingMods, ServerStarting, Unknown
+
+ConnectionRejection
+-------------------
+  class ConnectionRejection
+  {
+      ConnectionRejectionCode code;
+      string message;
+      ConnectionRejectionData data;  // includes clientRequiredModIds
+  }
+
+DisconnectionCode
+-----------------
+  ConnectionLost, Disconnected, Kicked, Banned
+
+Disconnection
+-------------
+  class Disconnection
+  {
+      DisconnectionCode code;
+      string message;
+  }
+
+Connection
+----------
+  class Connection
+  {
+      EndPoint EndPoint;  // ipAddress + port
+      string Password;
+  }
+
+Other Managers (Singletons)
+---------------------------
+  Class                   Type                    Access
+  AudioManager            MonoBehaviourSingleton  AudioManager.Instance
+  CrowdManager            MonoBehaviourSingleton  CrowdManager.Instance
+  PhysicsManager          MonoBehaviourSingleton  PhysicsManager.Instance
+  ReplayManager           MonoBehaviourSingleton  ReplayManager.Instance
+  ThreadManager           MonoBehaviourSingleton  ThreadManager.Instance
+  AdminManager            MonoBehaviourSingleton  AdminManager.Instance
+  BanManager              MonoBehaviourSingleton  BanManager.Instance
+  ConnectionApprovalMgr   MonoBehaviourSingleton  ConnectionApprovalManager.Instance
+  TimeoutManager          MonoBehaviourSingleton  TimeoutManager.Instance
+  VoteManager             MonoBehaviourSingleton  VoteManager.Instance
+  WhitelistManager        MonoBehaviourSingleton  WhitelistManager.Instance
+  GameModeManager         NetworkBehaviourSingleton  GameModeManager.Instance
+  SynchronizedObjectMgr   NetworkBehaviourSingleton  SynchronizedObjectManager.Instance
+
+VoteManager
+-----------
+  VoteManager.Instance  // Singleton
+
+Manages votes (forfeit votes, etc.). Handled automatically by BaseGameMode but
+available for custom game modes to inspect or trigger votes.
+
+Vote
+----
+  Vote is a class passed through vote-related events:
+    vote.Title        // string - e.g. "Forfeit"
+    vote.Description  // string
+    vote.SteamId      // string - vote creator's Steam ID
+    vote.Teams        // PlayerTeam[] - which teams participate
+    vote.InFavourVotes
+    vote.RequiredVotes
+    vote.Passed       // bool

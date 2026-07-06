@@ -1,0 +1,191 @@
+UI System
+=========
+
+The game uses Unity UI Toolkit (UIElements) for all UI. Views are organized as
+VisualElement hierarchies with USS styling. The UIManager singleton provides
+access to every view.
+
+UIView
+------
+Base class for all UI views:
+
+  class UIView : MonoBehaviour
+  {
+      bool FocusRequiresMouse;
+      bool FocusIsInteractive;
+      bool VisibilityRequiresMouse;
+      bool VisibilityIsInteractive;
+      bool AlwaysVisible;
+      VisualElement RootVisualElement;
+      VisualElement View { get; set; }
+      bool IsVisible { get; set; }
+      bool IsFocused { get; set; }
+      int Order { get; }
+
+      virtual bool Show();
+      virtual bool Hide();
+      virtual bool Toggle();
+  }
+
+Each view wraps a named VisualElement from the UXML tree. Views are registered
+with the UIManager and managed through a focus/visibility system. The Order
+property determines z-ordering when multiple views are shown.
+
+Views are initialized by querying named elements from the root visual element:
+  base.View = rootVisualElement.Query<VisualElement>("MyViewName");
+
+UIViewController<T>
+--------------------
+  class UIViewController<T> : MonoBehaviour where T : UIView
+  {
+      virtual void Awake();      // Gets component reference
+      virtual void OnDestroy();  // Unregisters events
+  }
+
+UIPopupManager
+--------------
+Native popup system. Access via UIManager.Instance.PopupManager:
+
+  // Show a popup with the game's native frame
+  popupManager.ShowPopup(string name, string title, BasePopupContent content,
+                         bool showOkButton, bool showCloseButton, object data = null);
+
+  // Hide by name
+  popupManager.HidePopup(string name);
+
+  // Check if a popup is open
+  Popup existing = popupManager.GetPopupByName(string name);
+
+The popup template consists of:
+  - Header: titleLabel (Label), CloseIconButtonContainer -> closeIconButton (IconButton)
+  - Content: where Content.VisualElement is added
+  - Footer: okButton (Button, hidden via display: none when showOkButton: false)
+
+Popups can be stacked. Each popup must have a unique name. If you try to show
+a popup with a name that already exists, it returns the existing one.
+
+ShowPopup Example:
+  UIManager.Instance.PopupManager.ShowPopup(
+      "myModPopup",              // Unique popup name
+      "My Mod Settings",         // Title shown in header
+      new MyPopupContent(),      // Your content (see BasePopupContent)
+      showOkButton: false,
+      showCloseButton: true      // Shows X button
+  );
+
+BasePopupContent
+----------------
+Abstract base for popup content. Pass null to constructor, override Initialize():
+
+  class BasePopupContent
+  {
+      VisualElement VisualElement { get; set; }
+      Action Initialized;
+      Action Disposed;
+
+      BasePopupContent(VisualTreeAsset asset); // pass null
+      virtual void Initialize();
+      virtual void Dispose();
+      internal virtual void Update();
+  }
+
+Built-in subclasses: PopupNotificationContent, PopupMissingPasswordContent,
+PopupMissingModsPopupContent
+
+Your custom content class:
+  class MyPopupContent : BasePopupContent
+  {
+      public MyPopupContent() : base(null) { }
+
+      public override void Initialize()
+      {
+          var root = new VisualElement();
+          root.style.minWidth = 300;
+
+          var toggle = new Toggle("Enable Feature") { value = true };
+          root.Add(toggle);
+
+          VisualElement = root;
+          Initialized?.Invoke();
+      }
+  }
+
+Custom UI Elements (found in puck.dll)
+---------------------------------------
+These are UXML-compatible custom VisualElements:
+
+  Class          Base           UXML Attributes
+  Icon           VisualElement  texture
+  IconButton     Button         texture
+  KeyBindField   VisualElement  interaction-type, label, path
+  Link           VisualElement  text
+  Mmr            VisualElement  (queries internal labels)
+  PlayButton     Button         text, description
+  Spinner        VisualElement  (animated spinner)
+  User           VisualElement  username, avatar-texture
+  Mod            VisualElement  description, preview-texture
+  ModPreview     VisualElement  is-statistics-visible, subscriptions,
+                                upvotes, downvotes
+
+You can instantiate these from code:
+  var iconBtn = new IconButton();
+  iconBtn.texture = Resources.Load<Texture2D>("myIcon");
+
+Or query them from UXML templates if they are defined there.
+
+UIMainMenu
+----------
+  class UIMainMenu : UIView
+  {
+      void Initialize(VisualElement rootVisualElement);
+      // Queries: "MainMenuView" -> "MainMenu" container
+      // Buttons: PlayButton, PlayerButton, SettingsButton, ModsButton, ExitGameButton
+
+      override bool Show(); // Triggers Event_OnMainMenuShow
+      override bool Hide(); // Triggers Event_OnMainMenuHide
+  }
+
+UIPauseMenu
+-----------
+  class UIPauseMenu : UIView
+  {
+      void Initialize(VisualElement rootVisualElement);
+      // Queries: "PauseMenuView" -> "PauseMenu" container
+      // Buttons: ReturnToGameButton, SelectTeamButton, SelectPositionButton,
+      //          ForfeitButton, ServerBrowserButton, SettingsButton,
+      //          DisconnectButton, ExitGameButton
+
+      void SetSelectTeamEnabled(bool value);
+      void SetSelectPositionEnabled(bool value);
+      void SetForfeitEnabled(bool value);
+      void SetForfeitVoted(bool value);
+      void SetVoiceEnabled(bool value);
+      void SetTickRate(int tickRate);
+  }
+
+Menu Button Injection Pattern
+-----------------------------
+Inject custom buttons into existing menus by reflecting private fields to find
+button containers and then cloning their USS styles:
+
+  var settingsField = typeof(UIMainMenu).GetField("settingsButton",
+      BindingFlags.Instance | BindingFlags.NonPublic);
+  var settingsBtn = settingsField.GetValue(uiManager.MainMenu) as Button;
+  var container = settingsBtn.parent;
+  var myBtn = new Button(OnClick) { text = "MY MOD" };
+  foreach (string cls in settingsBtn.GetClasses())
+      myBtn.AddToClassList(cls);
+  container.Insert(container.IndexOf(settingsBtn) + 1, myBtn);
+
+The same pattern works for UIPauseMenu buttons. Always clean up injected
+buttons in OnDisable() to avoid orphan UI elements.
+
+USS Styling
+-----------
+Toggle game-defined USS classes on elements:
+
+  element.EnableInClassList("className", true/false);
+
+Known class names: "owned", "blurred", "small", "hideUsername", "warning",
+"isLocalPlayer", "claimed", "patreon", "moderator", "admin", "developer",
+"passwordProtected", "modded", "unreachable", "firstChild", "lastChild"

@@ -1,0 +1,152 @@
+Network Behaviour
+=================
+
+Custom network-accessible components should extend NetworkBehaviour from
+Unity.Netcode. The game already imports Unity.Netcode and uses it for all
+networked objects.
+
+  using Unity.Netcode;
+
+  class MyNetworkComponent : NetworkBehaviour
+  {
+      NetworkVariable<int> MyValue;
+
+      protected override void OnNetworkPreSpawn(ref NetworkManager networkManager)
+      {
+          MyValue = new NetworkVariable<int>();
+          base.OnNetworkPreSpawn(ref networkManager);
+      }
+  }
+
+NetworkManager Access
+---------------------
+  NetworkManager.Singleton.IsServer     // True on authoritative server
+  NetworkManager.Singleton.IsClient     // True on client instances
+  NetworkManager.Singleton.IsHost       // True if this instance is both server and client
+  NetworkManager.Singleton.LocalClientId // Our client ID (ulong)
+
+Always check IsServer before executing server-only logic. Mods can also use
+Event_Server_ and Event_Client_ prefixes for network-aware event handling.
+
+RPCs
+----
+RPCs are the primary mechanism for calling methods across the network.
+
+  // Client-to-Server RPC
+  [Rpc(SendTo.Server, DeferLocal = true)]
+  void Client_DoSomethingRpc(string data, RpcParams rpcParams = default(RpcParams))
+  {
+      // Server-side logic
+  }
+
+  // Server-to-Clients RPC
+  [Rpc(SendTo.ClientsAndHost)]
+  void Server_NotifyAllRpc(string data, RpcParams rpcParams = default(RpcParams))
+  {
+      // Client-side logic
+  }
+
+RPC attributes:
+  SendTo.Server          - Call is sent from client to server
+  SendTo.ClientsAndHost  - Call is sent from server to all clients (and host)
+  SendTo.Owner           - Call is sent to the owner of the NetworkObject
+  SendTo.NotOwner        - Call is sent to all non-owner clients
+  SendTo.Me              - Call triggers locally (no network)
+
+DeferLocal:
+  When true, the RPC call is deferred to the next frame on the local instance.
+  This prevents re-entrancy issues.
+
+RpcParams:
+  Optional parameter at the end of RPC methods. Carries metadata about the
+  sender. Access the sender's client ID via rpcParams.SenderClientId.
+
+Example:
+  void Update()
+  {
+      if (IsOwner && Input.GetKeyDown(KeyCode.F))
+          Server_RequestPowerupRpc();
+  }
+
+  [Rpc(SendTo.Server, DeferLocal = true)]
+  void Server_RequestPowerupRpc(RpcParams rpcParams = default)
+  {
+      ulong senderId = rpcParams.SenderClientId;
+      GrantPowerup(senderId);
+  }
+
+NetworkVariable<T>
+------------------
+Synchronize state automatically across the network.
+
+  var variable = new NetworkVariable<T>(defaultValue);
+  variable.OnValueChanged += (oldValue, newValue) => { ... };
+
+NetworkVariable types must be supported by Unity Netcode's serialization.
+Supported types include: bool, int, float, string, byte, sbyte, short, ushort,
+long, ulong, Vector2, Vector3, Color, FixedString32Bytes, and structs with
+[GenerateSerialization] or custom serialization.
+
+Initialize in OnNetworkPreSpawn:
+  protected override void OnNetworkPreSpawn(ref NetworkManager networkManager)
+  {
+      MyVar = new NetworkVariable<int>(0);
+      MyVar.OnValueChanged += OnMyVarChanged;
+      base.OnNetworkPreSpawn(ref networkManager);
+  }
+
+Accessing variables:
+  int current = MyVar.Value;
+  MyVar.Value = newValue;  // Server writes propagate to clients
+
+NetworkVariable permissions can be controlled:
+  new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone,
+      NetworkVariableWritePermission.Server);
+
+  ReadPermission: Everyone, Owner, Server
+  WritePermission: Server, Owner
+
+NetworkObject & NetworkObjectReference
+--------------------------------------
+Any object with a NetworkObject component can be referenced across the network
+via NetworkObjectReference:
+
+  [Rpc(SendTo.ClientsAndHost)]
+  void Server_SpawnEffectRpc(NetworkObjectReference targetRef)
+  {
+      if (targetRef.TryGet(out NetworkObject netObj))
+      {
+          // Use netObj to find the game object
+      }
+  }
+
+Convert from event messages:
+  if (msg.TryGetValue("puck", out var val) && val is NetworkObjectReference nor)
+  {
+      Puck puck = NetworkingUtils.GetPuckFromNetworkObjectReference(nor);
+  }
+
+NetworkedInput<T>
+-----------------
+High-frequency input synchronization. Used by PlayerInput for all player
+controls. Not intended for general mod use, but accessible for reading.
+
+  input.Value              // Current input value (T)
+  input.TickRate = 200     // Update rate (default 200Hz)
+
+Network Behaviour Lifecycle
+---------------------------
+  1. OnNetworkPreSpawn - Initialize NetworkVariables before spawning
+  2. OnNetworkSpawn - Component is now active on the network
+  3. (Gameplay) - NetworkVariables sync, RPCs flow
+  4. OnNetworkDespawn - Component is removed from the network
+  5. OnDestroy - Cleanup
+
+Override OnNetworkSpawn() for post-spawn setup:
+  public override void OnNetworkSpawn()
+  {
+      if (IsServer)
+      {
+          // Server-only setup
+      }
+  }

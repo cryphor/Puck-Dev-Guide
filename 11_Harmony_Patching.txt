@@ -1,0 +1,149 @@
+Patching with Harmony
+=====================
+
+The game already uses Harmony (the HarmonyLib namespace is imported). You can
+patch any method in your mod without needing a separate Harmony loader.
+
+Basic Patch
+-----------
+  using HarmonyLib;
+
+  [HarmonyPatch(typeof(SomeClass), "SomeMethod")]
+  class SomePatch
+  {
+      static void Postfix()
+      {
+          // Your code here
+      }
+  }
+
+The game uses a PatchManager that applies VisualElementHarmonyPatch on startup.
+You can create your own Harmony instances for more control.
+
+Setup in Your Mod
+-----------------
+  public class MyMod : IPuckPlugin
+  {
+      private Harmony harmony;
+
+      public bool OnEnable()
+      {
+          harmony = new Harmony("com.example.mymod");
+          harmony.PatchAll();  // Finds all [HarmonyPatch] classes
+          return true;
+      }
+
+      public bool OnDisable()
+      {
+          harmony?.UnpatchAll(harmony.Id);  // Removes all patches from this mod
+          return true;
+      }
+  }
+
+Always use a unique Harmony ID (e.g., "com.yourname.modname") to avoid
+conflicts with other mods.
+
+Patch Types
+-----------
+  Prefix - Runs before the original method. Can skip or modify arguments.
+  Postfix - Runs after the original method. Can read/modify return value.
+  Transpiler - Modifies the IL code of the method (advanced).
+  Finalizer - Runs in a finally block (for error handling).
+
+Prefix Example:
+  [HarmonyPatch(typeof(Player), nameof(Player.TakeDamage))]
+  class PreventDamagePatch
+  {
+      static bool Prefix(ref int damage)
+      {
+          if (damage > 100) return false;  // Skip original method
+          damage = Mathf.Min(damage, 50);  // Cap damage
+          return true;
+      }
+  }
+
+Postfix with __result:
+  [HarmonyPatch(typeof(GameManager), nameof(GameManager.GetScorers))]
+  class ScoreLoggerPatch
+  {
+      static void Postfix(ref List<Player> __result)
+      {
+          foreach (var p in __result)
+              Debug.Log($"Scorer: {p.Username.Value}");
+      }
+  }
+
+Common Harmony Annotations
+--------------------------
+  [HarmonyPatch]                // Marks a class as a patch container
+  [HarmonyPrefix]               // Method runs before original
+  [HarmonyPostfix]              // Method runs after original
+  [HarmonyTranspiler]           // IL-level modification
+  [HarmonyTargetMethod]         // Dynamically specify which method to patch
+  [HarmonyPrepare]              // Conditional patching (return false to skip)
+
+Special Parameters
+------------------
+  __instance     - The instance of the class being patched (for instance methods)
+  __result       - The return value (in Postfix, ref to modify)
+  __state        - Pass state from Prefix to Postfix
+  __runOriginal  - Set to false in Prefix to skip original (bool ref)
+
+Finding Methods to Patch
+------------------------
+  Use nameof() for compile-safe names:
+    [HarmonyPatch(typeof(Puck), nameof(Puck.OnCollisionEnter))]
+
+  Use string literals only when nameof() is not possible:
+    [HarmonyPatch(typeof(SomeClass), "PrivateMethod")]
+
+  For generic methods, specify type parameters:
+    [HarmonyPatch(typeof(SomeClass), "GenericMethod", typeof(int))]
+
+TargetMethod Pattern (for complex targets):
+  [HarmonyPatch]
+  class MyPatch
+  {
+      [HarmonyTargetMethod]
+      static MethodBase TargetMethod()
+      {
+          return typeof(UIView).GetMethod("Show", Type.EmptyTypes);
+      }
+
+      [HarmonyPostfix]
+      static void OnShow(UIView __instance)
+      {
+          if (__instance is UIPauseMenu)
+              InjectMyButton();
+      }
+  }
+
+Common Patching Patterns
+------------------------
+
+  // Log all player spawns
+  [HarmonyPatch(typeof(PlayerManager), nameof(PlayerManager.HandlePlayerSpawned))]
+  class SpawnLogger
+  {
+      static void Postfix(Player player)
+      {
+          Debug.Log($"Player spawned: {player.Username.Value}");
+      }
+  }
+
+  // Prevent puck freezing
+  [HarmonyPatch(typeof(Puck), nameof(Puck.Server_Freeze))]
+  class NoFreezePatch
+  {
+      static bool Prefix() => false;  // Block all freeze calls
+  }
+
+  // Modify stick behavior
+  [HarmonyPatch(typeof(Stick), "UpdateStickPhysics")]
+  class StickModPatch
+  {
+      static void Postfix(Stick __instance)
+      {
+          __instance.transform.localScale *= 1.5f;  // Bigger stick
+      }
+  }

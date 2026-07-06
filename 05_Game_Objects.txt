@@ -1,0 +1,147 @@
+Game Objects
+============
+
+Puck (NetworkBehaviour)
+-----------------------
+The Puck is the central game object (the ball/puck). It has full network
+synchronization and physics.
+
+  // Core components
+  puck.Rigidbody                   // Rigidbody - the physics body
+  puck.SynchronizedObject          // SynchronizedObject - network sync component
+  puck.NetworkObjectCollisionRecorder
+  puck.ReplayTouchTracker
+  puck.CollisionRecorder
+
+  // State
+  puck.IsReplay                    // NetworkVariable<bool>
+  puck.Speed                       // float (current speed magnitude)
+  puck.AngularSpeed                // float (current angular speed)
+  puck.PredictedSpeed              // float (predicted speed)
+  puck.PredictedAngularSpeed       // float (predicted angular speed)
+  puck.ShotSpeed                   // float (last shot speed)
+  puck.IsGrounded                  // bool
+  puck.IsTouchingStick             // bool
+  puck.TouchingStick               // Stick
+  puck.MaxSpeed                    // float (30f)
+  puck.MaxAngularSpeed             // float (30f)
+
+  // Methods
+  puck.Server_Freeze(RigidbodyConstraints)
+  puck.Server_Unfreeze()
+  puck.GetPlayerCollisions()       // List<KeyValuePair<Player, float>>
+  puck.GetPlayerCollisionsByTeam(PlayerTeam team)
+  puck.IsActivelyTouchedBy(Player player)
+
+The Puck ticks at the game tick rate (default 200Hz). Speed and angular speed
+are computed from the Rigidbody velocity. The collision recorder tracks which
+players have touched the puck, useful for goal assists.
+
+GetPlayerCollisions() returns all players that collided with the puck and a
+float indicating the collision force/impact magnitude. This can be used to
+determine who last touched the puck for goal scoring logic.
+
+IsActivelyTouchedBy(Player) checks if a specific player is currently in contact
+with the puck via their stick or body.
+
+Common patterns:
+  // Check puck speed
+  if (puck.Speed > 20f) Debug.Log("Hard shot!");
+
+  // Freeze puck (server only)
+  if (NetworkManager.Singleton.IsServer)
+      puck.Server_Freeze(RigidbodyConstraints.FreezeAll);
+
+Stick (NetworkBehaviour)
+------------------------
+The Stick is the player's hockey stick, a networked object attached to the
+player.
+
+  stick.Player                     // Player (owner)
+
+Each player has one Stick. The stick's transform is driven by the player's
+input and physics simulation. You can access the stick position via:
+  Vector3 stickPos = player.Stick.transform.position;
+
+PlayerBody (NetworkBehaviour)
+-----------------------------
+  playerBody.Player                // Player (owner)
+  playerBody.transform             // Transform (position/rotation in world)
+
+The PlayerBody is the physical body representation of the player on the field.
+It is spawned when the player finishes position select and despawned when they
+leave or go to spectator.
+
+Common usage:
+  Vector3 pos = player.PlayerBody.transform.position;
+  float dist = Vector3.Distance(myPos, pos);
+
+You can also use PlayerBody to check for collisions:
+  private void OnCollisionEnter(Collision collision)
+  {
+      if (collision.gameObject.TryGetComponent<PlayerBody>(out var body))
+      {
+          Debug.Log($"Collided with {body.Player.Username.Value}");
+      }
+  }
+
+PlayerPosition (NetworkBehaviour)
+---------------------------------
+  playerPosition.transform.position // World position of the player
+
+A lightweight position tracker component. Useful when you only need position
+data and don't want to reference the full PlayerBody.
+
+SynchronizedObject (NetworkBehaviour)
+--------------------------------------
+The synchronization component attached to physics objects (puck, players). It
+handles server-authoritative position/rotation state sync.
+
+  // Properties
+  synchronizedObject.Rigidbody                    // Rigidbody component
+  synchronizedObject.PredictedLinearVelocity      // Vector3 (predicted by sync)
+  synchronizedObject.PredictedAngularVelocity     // Vector3 (predicted by sync)
+
+  // Client tick (snap to position)
+  synchronizedObject.OnClientTick(Vector3 pos, Quaternion rot, float deltaTime)
+
+  // Client smooth tick (returns snapshot for interpolation)
+  synchronizedObject.OnClientSmoothTick(Vector3 pos, Quaternion rot, SynchronizedObject obj, float deltaTime)
+      -> SynchronizedObjectSnapshot
+
+  // Server tick (returns current state)
+  synchronizedObject.OnServerTick(float deltaTime) -> (Vector3, Quaternion, ulong)
+
+  // Threshold checks
+  synchronizedObject.ShouldSendPosition(int tickRate)  // bool
+  synchronizedObject.ShouldSendRotation(int tickRate)  // bool
+
+Events:
+  Event_Everyone_OnSynchronizedObjectSpawned   // { synchronizedObject }
+  Event_Everyone_OnSynchronizedObjectDespawned  // { synchronizedObject }
+
+SynchronizedObjectSnapshot
+  struct SynchronizedObjectSnapshot
+  {
+      SynchronizedObject SynchronizedObject;
+      Vector3 Position;
+      Quaternion Rotation;
+      Vector3 LinearVelocity;
+      Vector3 AngularVelocity;
+  }
+
+Zone (MonoBehaviour, requires Collider)
+----------------------------------------
+A trigger zone that detects player enter/exit. Useful for custom game modes
+(rink zones, scoring zones, etc.). The zone's collider must be set as a trigger.
+
+  zone.ZoneId         // string - identifier set in the inspector
+  zone.Origin         // Vector3 - zone's world position
+  zone.Occupants      // IEnumerable<PlayerBody> - players currently inside
+
+Events:
+  Event_Everyone_OnPlayerEnterZone  // { zone, playerBody }
+  Event_Everyone_OnPlayerExitZone   // { zone, playerBody }
+
+Zones are placed in the scene by level designers. Each zone has a unique string
+ID. The Occupants property is updated in real-time via OnTriggerEnter/Stay/Exit.

@@ -1,0 +1,75 @@
+Puck Modding Guide
+========================
+
+Puck supports two types of plugins/mods:
+
+- Plugin - A local plugin loaded from the Plugins/ directory (one folder per plugin,
+  each containing a DLL). These are standalone mods not distributed via Steam Workshop.
+- Mod - A Steam Workshop item. Managed through Steam Workshop and installed to the
+  workshop folder.
+
+Both use the same underlying system: a DLL that implements IPuckPlugin with
+OnEnable() and OnDisable() returning bool.
+
+Getting Started
+===============
+
+Project Setup
+-------------
+1. Create a new C# Class Library project targeting .NET Standard 2.1
+2. Reference Puck.dll and required Unity assemblies from the game's
+   Puck_Data/Managed/ directory
+3. Reference HarmonyLib.dll for patching
+4. Build your DLL
+
+Required References
+-------------------
+The minimal set of references your project needs:
+
+  Assembly               Location
+  Puck.dll               Puck_Data/Managed/
+  UnityEngine.dll        Unity installations/2022.3.x/Editor/Data/Managed/
+  UnityEngine.CoreModule.dll
+  UnityEngine.UIElements.dll
+  UnityEngine.InputSystem.dll (if using input)
+  Unity.Netcode.Runtime.dll
+  HarmonyLib.dll         (from BepInEx or NuGet)
+
+Target Framework: .NET Standard 2.1
+
+Folder Structure
+----------------
+Puck/
+  Plugins/
+    MyPlugin/           <-- Folder name = plugin ID
+      MyPlugin.dll    <-- Your compiled DLL
+
+For Steam Workshop mods, files go through the workshop system.
+
+Debugging Your Mod
+------------------
+  - Use Debug.Log(), Debug.LogWarning(), Debug.LogError() for console output
+  - Open the Unity Developer Console (tilde key ~) in-game to see logs
+  - Check Player.log in %AppData%\..\LocalLow\Team Pucks\Puck\ for full logs
+  - If your DLL fails to load, check for missing references or .NET version mismatches
+  - Use try/catch in OnEnable() to prevent crashes from breaking the mod loader
+
+Installing Plugins
+------------------
+  1. Build your DLL
+  2. Create a folder under Puck/Plugins/ with your mod name
+  3. Place your DLL (and any dependencies) inside
+  4. Launch Puck - the mod manager loads all plugins automatically
+  5. Enable your plugin in the in-game Mods menu (if disabled by default)
+
+Plugin vs Mod Decision
+----------------------
+  Use a Plugin when:
+    - You want rapid iteration during development
+    - The mod is for personal/private server use
+    - You need to test changes without Steam Workshop delay
+
+  Use a Mod when:
+    - You want to distribute to the public
+    - The mod should sync automatically for server players
+    - You want version tracking through Steam

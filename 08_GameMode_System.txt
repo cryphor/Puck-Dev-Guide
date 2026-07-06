@@ -1,0 +1,151 @@
+GameMode System
+===============
+
+The game uses a pluggable game mode system. Custom game modes extend
+BaseGameMode and override phase hooks to implement custom behavior.
+
+  abstract class BaseGameMode<TConfig> : IGameMode where TConfig : BaseGameModeConfig, new()
+
+Available configurations:
+  - BaseGameModeConfig - base
+  - StandardGameModeConfig - standard mode config
+  - PublicGameModeConfig - public mode config
+  - CompetitiveGameModeConfig - comp mode config
+
+Available game modes:
+  - StandardGameMode<TConfig> - standard mode
+  - PublicGameMode<TConfig> - public mode
+  - CompetitiveGameMode<TConfig> - competitive mode
+  - MatchableGameMode<TConfig> - matchable/base for comp
+
+The type hierarchy:
+  BaseGameMode<TConfig> : IGameMode
+    +-- StandardGameMode<TConfig>
+    |     +-- PublicGameMode<TConfig>     (for public servers)
+    |     +-- MatchableGameMode<TConfig>
+    |           +-- CompetitiveGameMode<TConfig>  (for ranked/comp)
+    +-- (your custom game mode)
+
+Key methods:
+
+  // Lifecycle
+  Initialize(Level, ServerManager, GameManager, PlayerManager,
+             PuckManager, ChatManager, ReplayManager, VoteManager)
+  Dispose()
+
+  // Scoring (protected)
+  ScoreGoal(PlayerTeam byTeam, Player goalPlayer, Player assistPlayer,
+            Player secondAssistPlayer, Puck puck)
+
+  // Config (protected)
+  OnConfigLoaded()    // override to validate/transform config after loading
+
+  // Game phase hooks (all protected virtual)
+  OnGamePhaseStarted(GamePhase gamePhase)
+  OnGamePhaseEnded(GamePhase gamePhase)
+  OnGamePhaseTimedOut(GamePhase gamePhase)
+  OnWarmupStarted() / OnWarmupTimedOut() / OnWarmupEnded()
+  OnPreGameStarted() / OnPreGameTimedOut() / OnPreGameEnded()
+  OnFaceOffStarted() / OnFaceOffTimedOut() / OnFaceOffEnded()
+  OnPlayStarted() / OnPlayTimedOut() / OnPlayEnded()
+  OnBlueScoreStarted() / OnBlueScoreTimedOut() / OnBlueScoreEnded()
+  OnRedScoreStarted() / OnRedScoreTimedOut() / OnRedScoreEnded()
+  OnReplayStarted() / OnReplayTimedOut() / OnReplayEnded()
+  OnIntermissionStarted() / OnIntermissionTimedOut() / OnIntermissionEnded()
+  OnGameOverStarted() / OnGameOverTimedOut() / OnGameOverEnded()
+  OnPostGameStarted() / OnPostGameTimedOut() / OnPostGameEnded()
+
+  // Player event hooks (all protected virtual)
+  OnPlayerJoined(Player player)
+  OnPlayerLeft(Player player)
+  OnPlayerGameStateChanged(Player player, PlayerGameState old, PlayerGameState new)
+  OnPlayerPhaseChanged(Player player, PlayerPhase oldPhase, PlayerPhase newPhase)
+  OnPlayerTeamChanged(Player player, PlayerTeam oldTeam, PlayerTeam newTeam)
+  OnPlayerRoleChanged(Player player, PlayerRole oldRole, PlayerRole newRole)
+  OnPlayerPositionChanged(Player player, PlayerPosition oldPos, PlayerPosition newPos)
+  OnPlayerRequestTeamSelect(Player player)
+  OnPlayerRequestTeam(Player player, PlayerTeam team)
+  OnPlayerRequestPositionSelect(Player player)
+  OnPlayerRequestPosition(Player player, PlayerPosition position)
+  OnPlayerRequestHandedness(Player player, PlayerHandedness handedness)
+  OnPlayerRequestForfeit(Player player)
+
+  // Game event hooks (all protected virtual)
+  OnGoalScored(PlayerTeam byTeam, Player goalPlayer, Player assistPlayer,
+               Player secondAssistPlayer, Puck puck)
+  OnPuckEnterGoal(PlayerTeam team, Puck puck)
+  OnPlayerEnterZone(Zone zone, PlayerBody playerBody)
+  OnPlayerExitZone(Zone zone, PlayerBody playerBody)
+
+  // Vote hooks (all protected virtual)
+  OnVoteAdded(Vote vote)
+  OnVoteProgressed(Vote vote, string steamId, bool inFavour)
+  OnVoteRemoved(Vote vote)
+
+  // Chat commands
+  GetChatCommands() -> List<ChatCommandInfo>   // override to add custom commands
+  OnChatCommand(Player player, string command, string[] args)
+
+Game Phase Flow
+---------------
+  Warmup -> PreGame -> FaceOff -> Play -> (BlueScore|RedScore) -> Replay ->
+  FaceOff -> ... -> GameOver -> PostGame -> (back to lobby)
+
+  - Warmup: Players join, select teams/positions
+  - PreGame: Brief countdown before faceoff
+  - FaceOff: Puck spawns at center
+  - Play: Active gameplay
+  - BlueScore/RedScore: Goal celebration
+  - Replay: Goal replay (skippable)
+  - Intermission: Between periods
+  - GameOver: Match ends, final score shown
+  - PostGame: Server transitions back
+
+Config File Format (JSON)
+-------------------------
+Game modes load configuration from JSON files. Custom configs should mirror
+the structure of the built-in configs:
+
+  {
+      "gameDurationSeconds": 300,
+      "overtimeSeconds": 60,
+      "maxGoals": 10,
+      "enableReplays": true,
+      // Add custom fields for your mode
+  }
+
+Creating a Custom Game Mode
+---------------------------
+  1. Create a config class extending StandardGameModeConfig (or BaseGameModeConfig)
+  2. Create a game mode class extending StandardGameMode<YourConfig>
+  3. Override phase hooks
+  4. Register your mode via ServerConfig.gameMode (or programmatically)
+
+  class MyGameModeConfig : StandardGameModeConfig
+  {
+      public int MyCustomSetting = 5;
+  }
+
+  class MyGameMode : StandardGameMode<MyGameModeConfig>
+  {
+      public MyGameMode() : base("myconfig.json") { }
+
+      protected override void OnPlayStarted()
+      {
+          base.OnPlayStarted();
+          Debug.Log($"Custom setting: {Config.MyCustomSetting}");
+      }
+
+      protected override void OnGoalScored(Dictionary<string, object> msg)
+      {
+          // Only count goals if custom condition is met
+          base.OnGoalScored(msg);
+      }
+
+      protected override void OnGamePhaseStarted(GamePhase phase)
+      {
+          base.OnGamePhaseStarted(phase);
+          if (phase == GamePhase.Play)
+              DoCustomStartBehavior();
+      }
+  }

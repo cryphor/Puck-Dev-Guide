@@ -1,0 +1,82 @@
+Utility Classes
+===============
+
+Utils
+-----
+Static utility methods for common game operations:
+
+  Utils.GetCollisionForce(Collision collision)           // Returns impact force
+  Utils.GetTeamColor(PlayerTeam team)                    // Color (blue or red)
+  Utils.GetNameFromTeam(PlayerTeam team)                 // "Blue", "Red", etc.
+  Utils.GetTeamFromName(string name)                     // Inverse of GetNameFromTeam
+  Utils.GetNameFromRole(PlayerRole role)                 // "Attacker", "Goalie"
+  Utils.GetRoleFromName(string name)                     // Inverse of GetNameFromRole
+  Utils.GameUnitsToMetric(float value)                   // Convert to meters
+  Utils.GameUnitsToImperial(float value)                 // Convert to feet/inches
+  Utils.Vector2Clamp(Vector2 value, Vector2 min, Vector2 max)
+  Utils.Vector3Clamp(Vector3 value, Vector3 min, Vector3 max)
+  Utils.RotatePointAroundPivot(Vector3 point, Vector3 pivot, Vector3 angles)
+  Utils.WrapEulerAngle(float angle)
+  Utils.Map(float value, float from1, float to1, float from2, float to2)
+
+Common usage examples:
+  // Convert game units to human-readable
+  float speedMph = Utils.GameUnitsToImperial(puck.Speed);
+
+  // Get team-specific color for UI
+  Color teamColor = Utils.GetTeamColor(player.Team);
+
+  // Clamp a position to the rink bounds
+  Vector3 clamped = Utils.Vector3Clamp(pos, minBound, maxBound);
+
+  // Map a value range (useful for UI sliders)
+  float opacity = Utils.Map(distance, 0f, 10f, 1f, 0f);
+
+NetworkingUtils
+---------------
+Helpers for resolving network references:
+
+  NetworkingUtils.GetPlayerFromNetworkObjectReference(NetworkObjectReference)
+  NetworkingUtils.GetPlayerPositionFromNetworkObjectReference(NetworkObjectReference)
+  NetworkingUtils.GetPuckFromNetworkObjectReference(NetworkObjectReference)
+
+These convert NetworkObjectReference values (received via events or RPCs) into
+their corresponding game objects. NetworkObjectReference is a serializable
+reference to a NetworkObject that works across the network.
+
+Usage:
+  void OnPuckSpawned(Dictionary<string, object> msg)
+  {
+      if (msg.TryGetValue("puck", out var ref) && ref is NetworkObjectReference nor)
+      {
+          Puck puck = NetworkingUtils.GetPuckFromNetworkObjectReference(nor);
+          if (puck != null) Debug.Log("Puck spawned at " + puck.transform.position);
+      }
+  }
+
+BackendUtils
+------------
+  // Various backend utility methods for communicating with the Puck backend API.
+  // These handle authentication, leaderboards, and profile data.
+
+Constants
+---------
+Important game constants:
+
+  Constants.APP_ID                    // 2994020u (Steam App ID)
+  Constants.TEAM_BLUE_COLOR           // "#3b82f6"
+  Constants.TEAM_RED_COLOR            // "#d13333"
+  Constants.DEFAULT_SERVER_PORT       // 30609
+  Constants.DEFAULT_SERVER_MAX_PLAYERS // 12
+  Constants.DEFAULT_SERVER_TICK_RATE  // 200
+
+  // Additional constants:
+  Constants.GAME_UNITS_TO_METRES      // Conversion factor
+  Constants.PUCK_RADIUS               // Puck physics radius
+  Constants.STICK_LENGTH              // Stick length in game units
+  Constants.GOAL_WIDTH                // Goal opening width
+  Constants.GOAL_HEIGHT               // Goal opening height
+  Constants.RINK_LENGTH               // Rink length
+  Constants.RINK_WIDTH                // Rink width
+  Constants.FACEOFF_CIRCLE_RADIUS     // Center faceoff circle radius
+  Constants.PLAYER_SPEED_MAX          // Maximum player movement speed

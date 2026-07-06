@@ -1,0 +1,187 @@
+Chat System
+===========
+
+ChatManager (NetworkBehaviourSingleton<ChatManager>)
+----------------------------------------------------
+  ChatManager.Instance    // Singleton
+
+  // Client methods
+  chatManager.Client_SendChatMessage(string content, bool isQuickChat, bool isTeamChat)
+  chatManager.Client_QuickChatAction(int index)
+  chatManager.SetQuickChatEnabled(bool isEnabled, QuickChatCategory? category = null)
+
+  // Server methods (send to specific clients)
+  chatManager.Server_SendChatMessage(ChatMessage msg, params ulong[] clientIds)
+  chatManager.Server_SendChatMessage(string content, string color, params ulong[] clientIds)
+
+  // Server methods (broadcast to all)
+  chatManager.Server_BroadcastChatMessage(ChatMessage msg)
+  chatManager.Server_BroadcastChatMessage(string content, string color = null)
+
+  // Local-only methods (non-networked, adds to the local chat UI)
+  chatManager.AddChatMessage(ChatMessage chatMessage)
+  chatManager.RemoveChatMessage(ChatMessage chatMessage)
+  chatManager.ClearChatMessages()
+  chatManager.ParseChatMessageContent(string content)
+
+Client_SendChatMessage sends a message to the server via RPC. The server
+processes it, triggers events, and forwards it to recipients. Quick chat
+does the same but marks IsQuickChat=true.
+
+Server_SendChatMessage with string+color creates a system message (IsSystem=true)
+with the content wrapped in a rich text color tag. Broadcast variants send to
+everyone, while the params overload targets specific client IDs by client ID.
+
+ChatMessage
+-----------
+  class ChatMessage : INetworkSerializable, IEquatable<ChatMessage>
+  {
+      FixedString32Bytes? SteamID;
+      FixedString32Bytes? Username;
+      PlayerTeam? Team;
+      FixedString512Bytes Content;
+      double Timestamp;
+      bool IsQuickChat;
+      bool IsTeamChat;
+      bool IsSystem;
+  }
+
+IsSystem is used for server-generated messages (join/leave, scores, errors).
+System messages show without a username prefix. Non-system messages display
+as "Username: content" with the username colored by team.
+
+Client messages have a max length of 128 characters. The chat buffer holds
+up to 100 messages before dropping the oldest.
+
+Quick Chat
+----------
+  enum QuickChatCategory { Information, Compliments, Reactions, Apologies, Emojis }
+
+  struct QuickChat
+  {
+      bool IsTeamChat;
+      string Content;
+  }
+
+Quick chat is triggered via QuickChat1Action through QuickChat5Action input
+bindings. Pressing a quick chat key the first time shows the category selector
+(select by pressing 1-5). Once a category is active, pressing 1-5 sends the
+corresponding quick chat message. The selector auto-cancels after 5 seconds.
+
+Events
+------
+  // Fired when a player sends a chat message from client to server
+  "Event_Server_OnChatMessageReceived"
+      { "chatMessage": ChatMessage }
+
+  // Fired when a player types a slash command
+  "Event_Server_OnChatCommand"
+      { "clientId": ulong, "command": string, "args": string[] }
+
+  // Fired on the client when chat messages are added/removed/cleared locally
+  "Event_OnChatMessageAdded"     { "chatMessage": ChatMessage }
+  "Event_OnChatMessageRemoved"   { "chatMessage": ChatMessage }
+  "Event_OnChatMessagesCleared"  (no data)
+
+  // Quick chat UI state
+  "Event_OnQuickChatEnabled"     { "category": QuickChatCategory, "quickChats": QuickChat[] }
+  "Event_OnQuickChatDisabled"    (no data)
+  "Event_OnQuickChatCancel"      (no data)
+
+  // UI submit (fired when player presses enter in chat input)
+  "Event_OnChatSubmitMessage"    { "content": string, "isTeamChat": bool }
+
+Server-Side: How Chat Commands Work
+-----------------------------------
+When a message starts with "/", the server does NOT broadcast it. Instead it
+fires Event_Server_OnChatCommand. Game modes listen to this event to implement
+custom commands:
+
+  EventManager.AddEventListener("Event_Server_OnChatCommand", OnChatCommand);
+
+  void OnChatCommand(Dictionary<string, object> msg)
+  {
+      ulong clientId = (ulong)msg["clientId"];
+      string command = (string)msg["command"];
+      string[] args = (string[])msg["args"];
+      Player player = PlayerManager.Instance.GetPlayerByClientId(clientId);
+  }
+
+The built-in BaseGameMode handles these commands by default:
+  /forfeit, /votekick <player>, /kick <player>, /ban <player|steamid>,
+  /unban <steamid>, /bots [mode|clear|<count>]
+
+Mods can register additional commands by overriding GetChatCommands() in a
+BaseGameMode subclass, or by listening to Event_Server_OnChatCommand directly.
+
+The command string includes the "/" prefix (e.g. "/forfeit"). Args are the
+space-split remainder. Unknown commands get the response "Unknown command".
+
+ChatManagerController (internal wiring)
+----------------------------------------
+The ChatManagerController MonoBehaviour bridges input and events to the
+ChatManager. It listens for quick chat key presses and the
+Event_OnChatSubmitMessage event, then calls the appropriate ChatManager
+methods. It also listens for Event_Server_OnChatMessageReceived to handle
+team chat routing: team messages are only sent to players on the same team.
+
+System Message Colors
+---------------------
+The game uses standard hex colors for system messages:
+  "#b8b8b8"  - Server info (join/leave, kick, ban notifications)
+  "#e74c3c"  - Error / bad command
+  "#ffe97f"  - Game info (goal, spawn, warmup messages)
+  "#e67e22"  - Vote messages
+  "#3b82f6"  - Blue team (via StringUtils.WrapInTeamColor)
+  "#d13333"  - Red team (via StringUtils.WrapInTeamColor)
+
+Chat Content Parsing
+--------------------
+For system messages (IsSystem=true):
+  - <united>value</united> tags convert game units to the user's preference
+    (Metric -> KPH, Imperial -> MPH)
+  - &units is replaced with "KPH" or "MPH"
+
+For player messages (IsSystem=false):
+  - Rich text tags are filtered (only known TMP tags allowed)
+  - Special characters outside the whitelist are removed
+  - Profanity is replaced with asterisks (if setting enabled)
+
+Examples
+--------
+  // Broadcast a colored system message to all players
+  ChatManager.Instance.Server_BroadcastChatMessage(
+      "Round starts in 10 seconds!", "#ffe97f");
+
+  // Send a private error message to a specific player
+  ChatManager.Instance.Server_SendChatMessage(
+      "You cannot do that yet", "#e74c3c", player.OwnerClientId);
+
+  // Register a custom chat command
+  EventManager.AddEventListener("Event_Server_OnChatCommand", msg =>
+  {
+      string cmd = (string)msg["command"];
+      if (cmd == "/ping")
+      {
+          ulong id = (ulong)msg["clientId"];
+          ChatManager.Instance.Server_SendChatMessage("Pong!", "#ffe97f", id);
+      }
+  });
+
+  // Listen for all chat messages (for moderation, logging, etc.)
+  EventManager.AddEventListener("Event_Server_OnChatMessageReceived", msg =>
+  {
+      ChatMessage chat = (ChatMessage)msg["chatMessage"];
+      Debug.Log($"[CHAT] {chat.Username}: {chat.Content}");
+  });
+
+  // Add a local chat message (client-side only, no network)
+  ChatManager.Instance.AddChatMessage(new ChatMessage
+  {
+      SteamID = null,
+      Username = null,
+      Team = null,
+      Content = StringUtils.WrapInColor("Local test message", "#b8b8b8"),
+      Timestamp = Utils.GetTimestamp(),
+      IsSystem = true
+  });

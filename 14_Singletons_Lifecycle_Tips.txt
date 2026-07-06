@@ -1,0 +1,93 @@
+Singletons
+=========
+
+MonoBehaviourSingleton<T>
+-------------------------
+  class MonoBehaviourSingleton<T> : MonoBehaviour where T : MonoBehaviour
+  {
+      static T Instance { get; }
+      virtual void Awake(); // sets Instance, DontDestroyOnLoad
+  }
+
+Used by most manager classes. Provides global access via Instance property.
+The Awake() method automatically registers the singleton and marks it as
+DontDestroyOnLoad so it persists across scene transitions.
+
+Usage:
+  PlayerManager.Instance.GetLocalPlayer();
+  UIManager.Instance.RootVisualElement;
+
+NetworkBehaviourSingleton<T>
+----------------------------
+  class NetworkBehaviourSingleton<T> : NetworkBehaviour where T : NetworkBehaviour
+  {
+      static T Instance { get; }
+  }
+
+Similar to MonoBehaviourSingleton but for NetworkBehaviour types. These
+singletons are networked - they exist on both server and client instances.
+
+Usage:
+  GameManager.Instance.GameState.Value;
+  ChatManager.Instance;
+
+Lifecycle
+=========
+
+Initialization order (from LifecycleManager):
+
+  1. BeforeSceneLoad: PatchManager, EventManager, GlobalStateManager,
+     SaveManager, InputManager, SettingsManager, ApplicationManager,
+     BackendManager, ItemManager, CameraManager
+  2. AfterSceneLoad: SceneManager, WebSocketManager, SteamManager,
+     ModManager, ServerReadinessManager
+  3. ModManager loads plugins from Plugins/ directory and mods from
+     Steam Workshop
+  4. Plugins are enabled if their status allows
+
+Important: During BeforeSceneLoad, most game systems are not yet available.
+Your plugin's OnEnable() runs during step 3-4, which means:
+  - SaveManager is ready (use for loading config)
+  - EventManager is ready (use for subscribing to events)
+  - UIManager, PlayerManager may NOT be fully initialized yet
+  - Defer UI work to Event_OnMainMenuShow or similar events
+
+If you access a null singleton, defer with a coroutine or event listener:
+  void OnEnable()
+  {
+      EventManager.AddEventListener("Event_OnMainMenuShow", OnMainMenuReady);
+  }
+
+  void OnMainMenuReady(Dictionary<string, object> _)
+  {
+      // Safe to access UI now
+      UIManager.Instance.MainMenu.Show();
+  }
+
+Tips
+====
+
+  - Use NetworkManager.Singleton.IsServer to check if you're on the server
+  - Use NetworkManager.Singleton.IsHost to check if you're the host
+  - Events prefixed with Event_Server_ only fire on the server side
+  - Events prefixed with Event_Everyone_ fire on both server and client
+  - Use SaveManager for persisting mod settings (wraps Unity's PlayerPrefs)
+  - The UI system uses Unity UI Toolkit (UIElements/UXML)
+  - For custom networked data, use NetworkVariable<T> or custom
+    NetworkBehaviour components
+  - Debug logging: Debug.Log(), Debug.LogWarning(), Debug.LogError()
+  - Always clean up event listeners in OnDisable() to prevent crashes
+  - Use unique Harmony IDs to avoid conflicts between mods
+  - Target .NET Standard 2.1 for maximum compatibility
+  - Check Puck.dll for updates after game patches - API surface may change
+  - The game tick rate is 200Hz by default - be mindful of performance
+  - Use try/catch in OnEnable() to prevent a crash from disabling all mods
+  - Prefix your SaveManager keys with a unique mod identifier
+  - For continuous checks (proximity, speed), attach a MonoBehaviour via
+    a GameObject you create in OnEnable() rather than using timers
+  - The Unity Developer Console (tilde key ~) shows Debug.Log output
+  - Full logs are written to Player.log in the Unity data folder
+  - When reflecting private fields, wrap in try/catch - field names may
+    change between game versions
+  - Vignette-style overlay elements should set pickingMode to Ignore so
+    they don't block UI interactions

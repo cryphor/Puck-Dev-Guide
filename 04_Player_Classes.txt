@@ -1,0 +1,152 @@
+Player Classes
+==============
+
+Player (NetworkBehaviour)
+-------------------------
+Access via PlayerManager.Instance.GetPlayers(), event messages, or
+PlayerManager.Instance.GetLocalPlayer().
+
+The Player class is the core networked representation of a connected user. It
+exposes state through NetworkVariables (auto-synced) and convenience properties
+(computed locally from NetworkVariables).
+
+  // NetworkVariables
+  player.GameState              // NetworkVariable<PlayerGameState>
+  player.CustomizationState     // NetworkVariable<PlayerCustomizationState>
+  player.Handedness             // NetworkVariable<PlayerHandedness>
+  player.SteamId                // NetworkVariable<FixedString32Bytes>
+  player.Username               // NetworkVariable<FixedString32Bytes>
+  player.Number                 // NetworkVariable<int>
+  player.PatreonLevel           // NetworkVariable<int>
+  player.AdminLevel             // NetworkVariable<int>
+  player.Goals                  // NetworkVariable<int>
+  player.Assists                // NetworkVariable<int>
+  player.Ping                   // NetworkVariable<ulong>
+  player.IsMuted                // NetworkVariable<bool>
+  player.IsReplay               // NetworkVariable<bool>
+
+  // Convenience properties
+  player.Phase                  // PlayerPhase
+  player.Team                   // PlayerTeam
+  player.Role                   // PlayerRole
+  player.FlagID
+  player.HeadgearIDBlueAttacker
+  // ... plus all other customization IDs
+
+  // Component references
+  player.PlayerInput            // PlayerInput component
+  player.PlayerCamera           // PlayerCamera (BaseCamera subclass)
+  player.PlayerBody             // PlayerBody reference
+  player.StickPositioner        // StickPositioner reference
+  player.Stick                  // Stick reference
+  player.PlayerPosition         // PlayerPosition reference
+  player.SpectatorCamera        // SpectatorCamera reference
+  player.IsCharacterSpawned     // bool
+  player.IsLocalPlayer          // (from NetworkBehaviour)
+  player.OwnerClientId          // (from NetworkBehaviour)
+
+  // Methods
+  player.GetPlayerJerseyID()
+  player.GetPlayerHeadgearID()
+  player.GetPlayerStickSkinID()
+  player.GetPlayerStickShaftTapeID()
+  player.GetPlayerStickBladeTapeID()
+
+NetworkVariable values are accessed via .Value property:
+  string name = player.Username.Value;
+  PlayerPhase phase = player.GameState.Value.Phase;
+
+To react to changes, subscribe to OnValueChanged:
+  player.GameState.OnValueChanged += (oldVal, newVal) =>
+  {
+      Debug.Log($"Player phase changed from {oldVal.Phase} to {newVal.Phase}");
+  };
+
+PlayerGameState
+---------------
+  struct PlayerGameState
+  {
+      PlayerPhase Phase;
+      PlayerTeam Team;
+      PlayerRole Role;
+  }
+
+This struct is replicated via NetworkVariable for every player. Changes to
+Phase, Team, or Role trigger Event_Everyone_OnPlayerGameStateChanged.
+
+PlayerCustomizationState
+------------------------
+  struct PlayerCustomizationState
+  {
+      int FlagID;
+      int HeadgearIDBlueAttacker;
+      int HeadgearIDRedAttacker;
+      int HeadgearIDBlueGoalie;
+      int HeadgearIDRedGoalie;
+      int MustacheID;
+      int BeardID;
+      int JerseyIDBlueAttacker;
+      // ... JerseyIDRedAttacker, JerseyIDBlueGoalie, JerseyIDRedGoalie
+      // ... StickSkinID*, StickShaftTapeID*, StickBladeTapeID*
+  }
+
+This struct stores which cosmetic items the player has equipped. Values are
+item IDs that map into the ItemManager database. Use ItemManager.GetItemById()
+to look up details.
+
+PlayerInput (NetworkBehaviour)
+------------------------------
+The PlayerInput component synchronizes the player's controller inputs over the
+network. All inputs use NetworkedInput<T>, which provides high-frequency state
+synchronization suitable for frame-accurate gameplay.
+
+  // Networked inputs
+  player.PlayerInput.MoveInput                 // NetworkedInput<Vector2>
+  player.PlayerInput.StickRaycastOriginAngleInput
+  player.PlayerInput.LookAngleInput            // NetworkedInput<Vector2>
+  player.PlayerInput.BladeAngleInput           // NetworkedInput<sbyte>
+  player.PlayerInput.SlideInput                // NetworkedInput<bool>
+  player.PlayerInput.SprintInput               // NetworkedInput<bool>
+  player.PlayerInput.TrackInput                // NetworkedInput<bool>
+  player.PlayerInput.LookInput                 // NetworkedInput<bool>
+  player.PlayerInput.JumpInput                 // NetworkedInput<byte>
+  player.PlayerInput.StopInput                 // NetworkedInput<bool>
+  player.PlayerInput.TwistLeftInput            // NetworkedInput<byte>
+  player.PlayerInput.TwistRightInput           // NetworkedInput<byte>
+  player.PlayerInput.DashLeftInput             // NetworkedInput<byte>
+  player.PlayerInput.DashRightInput            // NetworkedInput<byte>
+  player.PlayerInput.ExtendLeftInput           // NetworkedInput<bool>
+  player.PlayerInput.ExtendRightInput          // NetworkedInput<bool>
+  player.PlayerInput.LateralLeftInput          // NetworkedInput<bool>
+  player.PlayerInput.LateralRightInput         // NetworkedInput<bool>
+  player.PlayerInput.TalkInput                 // NetworkedInput<bool>
+
+  // Tick rate
+  player.PlayerInput.TickRate = 200;
+
+Reading input values:
+  Vector2 move = player.PlayerInput.MoveInput.Value;
+  float lookAngle = player.PlayerInput.LookAngleInput.Value.x;
+  bool isSliding = player.PlayerInput.SlideInput.Value;
+
+PlayerBody (NetworkBehaviour)
+------------------------------
+The physical body of a player in the scene (attacker or goalie variant). Each
+PlayerBody references its owner Player.
+
+  playerBody.Player   // Player - owner of this body
+
+Spawned body variant depends on player role: Attacker players get the attacker
+body prefab, Goalie players get the goalie body prefab.
+
+PlayerHandedness
+----------------
+  enum PlayerHandedness
+  {
+      None,
+      Left,
+      Right
+  }
+
+Determines which hand the stick is on. Replicated via Player.Handedness
+NetworkVariable and included in ConnectionData on join.

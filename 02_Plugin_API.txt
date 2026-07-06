@@ -1,0 +1,114 @@
+Plugin/Mod API
+===============
+
+IPuckPlugin Interface
+---------------------
+Every mod/plugin DLL must contain exactly one class implementing this interface:
+
+  interface IPuckPlugin
+  {
+      bool OnEnable();   // Called when mod is enabled. Return true on success.
+      bool OnDisable();  // Called when mod is disabled. Return true on success.
+  }
+
+The game uses reflection to find the class: it looks for the first non-abstract
+class in the assembly that implements IPuckPlugin. If your DLL contains multiple
+classes that implement IPuckPlugin, only the first one found is used.
+
+Important: OnEnable() is called during scene load, which means some game systems
+may not be fully initialized yet. If you need to access managers or UI, consider
+deferring initialization to a later event (e.g., listening for Event_OnMainMenuShow).
+
+BasePlugin<T>
+-------------
+The internal base class. Key properties:
+
+  Property    Type     Description
+  State       T        The plugin state
+  Path        string   Directory path of the plugin
+  IsReady     bool     Whether the plugin is ready
+  IsEnabled   bool     Whether the plugin is currently enabled
+  HasAssembly bool     Whether the plugin has an associated DLL
+
+State is a type parameter passed at construction. For Mods, this stores
+mod-specific data. For Plugins, it may be null.
+
+ModManager
+----------
+Static API for managing mods and plugins:
+
+  // Lists
+  ModManager.Mods           // List<Mod> - all mods
+  ModManager.Plugins        // List<Plugin> - all plugins
+  ModManager.ReadyMods      // Mod[] - ready mods
+  ModManager.EnabledMods    // Mod[] - enabled mods
+  ModManager.ReadyPlugins   // Plugin[]
+  ModManager.EnabledPlugins // Plugin[]
+
+  // Lookup by ID
+  ModManager.GetModById(string id)
+  ModManager.GetPluginById(string id)
+
+  // Status
+  ModManager.GetModStatus(string id)  // bool
+  ModManager.SetModStatus(string id, bool isEnabled)
+
+  // Mod/Plugin presence check
+  ModManager.IsModLoaded(string id)
+  ModManager.IsPluginLoaded(string id)
+
+  // Events
+  ModManager.OnModsLoaded          // Action
+  ModManager.OnModAdded            // Action<Mod>
+  ModManager.OnModRemoved          // Action<Mod>
+  ModManager.OnPluginAdded         // Action<Plugin>
+  ModManager.OnPluginRemoved       // Action<Plugin>
+
+The ModManager scans the Plugins/ directory and the Steam Workshop folder at
+startup. Plugins are loaded and enabled based on their persisted status. The
+ModManager also triggers lifecycle events (Event_OnModAdded, etc.) that other
+mods can listen for.
+
+ModConfig (for servers)
+-----------------------
+  class ModConfig
+  {
+      string id;
+      bool isEnabled;
+      bool isClientRequired;
+  }
+
+Server configs define which mods are active on the server and whether clients
+must have them installed. isClientRequired = true means the server rejects
+connections from clients missing that mod.
+
+ServerConfig
+------------
+  class ServerConfig
+  {
+      ushort port;                  // default: 30609
+      string name;                  // default: "MY PUCK SERVER"
+      int maxPlayers;               // default: 12
+      string password;
+      int tickRate;                 // default: 200
+      bool isPublic;                // default: true
+      bool useVoip;
+      bool useWhitelist;
+      ModConfig[] mods;
+      string gameMode;              // default: "public"
+      string level;                 // default: "default"
+      string[] EnabledModIds;
+      string[] ClientRequiredModIds;
+  }
+
+The ServerConfig is loaded from a JSON file when hosting a server. You can
+adjust these values programmatically through ServerManager.Instance.
+
+Plugin Lifecycle
+----------------
+  1. ModManager scans directories
+  2. Assembly is loaded via reflection
+  3. IPuckPlugin implementor is found
+  4. OnEnable() is called
+  5. If OnEnable() returns false, the plugin is marked as failed
+  6. OnDisable() is called when the plugin is toggled off or the game exits

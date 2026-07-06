@@ -1,0 +1,208 @@
+Event System
+============
+
+The game uses a centralized event system. You can listen for or trigger events.
+Events are identified by string names and carry data in a Dictionary<string, object>.
+The event system is global - events fired on the server can be received on clients
+depending on the naming prefix.
+
+EventManager
+------------
+  // Listen for events
+  EventManager.AddEventListener("EventName", CallbackMethod);
+
+  // Remove listener
+  EventManager.RemoveEventListener("EventName", CallbackMethod);
+
+  // Check if event has listeners
+  EventManager.HasEventListeners("EventName");
+
+  // Trigger events
+  EventManager.TriggerEvent("EventName", new Dictionary<string, object>
+  {
+      { "key", value }
+  });
+
+Callback signature: void MethodName(Dictionary<string, object> message)
+
+Important: Always RemoveEventListener in OnDisable() to prevent dangling
+references after your mod is disabled. Failing to do so can cause crashes.
+
+Best Practice:
+  private void OnEnable()
+  {
+      EventManager.AddEventListener("SomeEvent", HandleEvent);
+  }
+
+  private void OnDisable()
+  {
+      EventManager.RemoveEventListener("SomeEvent", HandleEvent);
+  }
+
+  private void HandleEvent(Dictionary<string, object> msg)
+  {
+      // Your handling code
+  }
+
+Event Naming Convention
+-----------------------
+  Prefix              Description
+  Event_Server_       Server-side only event
+  Event_Client_       Client-side only event
+  Event_Everyone_     Fires on both server and client
+  Event_On            General event (local)
+
+The prefix determines the network scope:
+  - Event_Server_ events are only triggered on the server instance. Listening
+    for these on the client does nothing.
+  - Event_Client_ events only fire on client instances.
+  - Event_Everyone_ events fire everywhere - both server and all clients.
+  - Event_On events are local to the instance (no network replication).
+
+Key Events
+==========
+
+Player Events
+-------------
+  Event                                     Message Keys
+  Event_Everyone_OnPlayerSpawned            player (Player)
+  Event_Everyone_OnPlayerDespawned          player (Player)
+  Event_Everyone_OnPlayerAdded              player (Player)
+  Event_Everyone_OnPlayerRemoved            player (Player)
+  Event_Everyone_OnPlayerGameStateChanged   player, oldGameState, newGameState
+  Event_Everyone_OnPlayerCustomizationStateChanged
+  Event_Everyone_OnPlayerHandednessChanged
+  Event_Everyone_OnPlayerSteamIdChanged
+  Event_Everyone_OnPlayerUsernameChanged
+  Event_Everyone_OnPlayerNumberChanged
+  Event_Everyone_OnPlayerPatreonLevelChanged
+  Event_Everyone_OnPlayerAdminLevelChanged
+  Event_Everyone_OnPlayerGoalsChanged
+  Event_Everyone_OnPlayerAssistsChanged
+  Event_Everyone_OnPlayerPingChanged
+  Event_Everyone_OnPlayerPositionChanged
+  Event_Everyone_OnPlayerIsMutedChanged
+  Event_Everyone_OnPlayerEnterZone
+  Event_Everyone_OnPlayerExitZone
+
+OnPlayerSpawned vs OnPlayerAdded:
+  - OnPlayerAdded fires when the player object is created (in the lobby/team select)
+  - OnPlayerSpawned fires when the player actually spawns on the field (after
+    position select). Use OnPlayerSpawned if you need the PlayerBody reference.
+
+Puck Events
+-----------
+  Event_Everyone_OnPuckSpawned              puck (Puck)
+  Event_Everyone_OnPuckDespawned            puck (Puck)
+  Event_Everyone_OnPuckPositionSpawned      puckPosition
+  Event_Everyone_OnPuckPositionDespawned    puckPosition
+  Event_Everyone_OnPuckIsReplayChanged      puck, oldIsReplay, newIsReplay
+
+SynchronizedObject Events
+-------------------------
+  Event_Everyone_OnSynchronizedObjectSpawned    synchronizedObject
+  Event_Everyone_OnSynchronizedObjectDespawned  synchronizedObject
+
+Chat Events
+-----------
+  Event_OnChatMessageAdded                  chatMessage
+  Event_OnChatMessageRemoved                chatMessage
+  Event_OnChatMessagesCleared
+  Event_Server_OnChatMessageReceived        chatMessage
+  Event_OnQuickChatEnabled                  category, quickChats
+  Event_OnQuickChatDisabled
+
+Game Events
+-----------
+  Event_Everyone_OnGameStateChanged         oldGameState, newGameState
+  Event_Everyone_OnGoalScored               byTeam, goalPlayer, assistPlayer, secondAssistPlayer, puck
+  Event_Server_OnPuckEnterGoal              team, puck
+  Event_Server_OnPlayerRequestTeamSelect    player
+  Event_Server_OnPlayerRequestTeam          player, team
+  Event_Server_OnPlayerRequestPositionSelect player
+  Event_Server_OnPlayerRequestPosition      player, playerPosition
+  Event_Server_OnPlayerRequestHandedness    player, handedness
+  Event_Server_OnPlayerRequestForfeit       player
+  Event_Server_OnVoteAdded                  vote
+  Event_Server_OnVoteProgressed             vote, steamId, inFavour
+  Event_Server_OnVoteRemoved                vote
+
+Mod/Plugin Events
+-----------------
+  Event_OnModAdded                          mod (Mod)
+  Event_OnModRemoved                        mod (Mod)
+  Event_OnPluginAdded                       plugin (Plugin)
+  Event_OnPluginRemoved                     plugin (Plugin)
+  Event_OnModStateChanged                   mod, oldState, newState
+  Event_OnPluginStateChanged                plugin, oldState, newState
+  Event_OnModEnableFailed                   mod
+  Event_OnModDisableFailed                  mod
+  Event_OnPluginEnableFailed                plugin
+  Event_OnPluginDisableFailed               plugin
+  Event_OnModsPluginEnabled                 plugin
+  Event_OnModsPluginDisabled                plugin
+  Event_OnModSteamWorkshopItemStateChanged             mod, oldState, newState
+  Event_OnModSteamWorkshopItemDetailsStateChanged       mod, oldState, newState
+  Event_OnModsModEnabled                    mod
+  Event_OnModsModDisabled                   mod
+
+Connection Events
+-----------------
+  Event_Server_OnServerStarted              serverConfig
+  Event_Server_OnServerStopped              wasHost
+  Event_OnServerStartFailed                 port
+  Event_Everyone_OnServerChanged            oldServer, newServer
+  Event_Server_OnApprovedClientConnected    clientId, connectionApproval
+  Event_Everyone_OnClientConnected          clientId
+  Event_Everyone_OnClientDisconnected       clientId
+  Event_OnClientConnected
+  Event_OnClientDisconnected
+  Event_OnTransportFailure
+  Event_OnConnectionStateChanged
+  Event_OnReconnectionStateChanged
+
+UI / Menu Events
+----------------
+  Event_OnMainMenuShow
+  Event_OnMainMenuHide
+  Event_OnMainMenuClickPlay
+  Event_OnMainMenuClickPlayer
+  Event_OnMainMenuClickSettings
+  Event_OnMainMenuClickMods
+  Event_OnMainMenuClickExitGame
+  Event_OnPauseMenuClickReturnToGame
+  Event_OnPauseMenuClickSelectTeam
+  Event_OnPauseMenuClickSelectPosition
+  Event_OnPauseMenuClickForfeit
+  Event_OnPauseMenuClickServerBrowser
+  Event_OnPauseMenuClickSettings
+  Event_OnPauseMenuClickDisconnect
+  Event_OnPauseMenuClickExitGame
+  Event_OnPopupShow                         name
+  Event_OnPopupHide                         name
+  Event_OnPopupClickOk                      popup
+  Event_OnPopupClickClose                   popup
+  Event_OnSettingsClickClose
+  Event_OnSettingsClickResetToDefault
+
+These UI events allow mods to react to navigation and user interaction without
+needing to patch UI methods with Harmony.
+
+Settings/Input Events
+---------------------
+  Event_OnFovChanged                        value (float)
+  Event_OnKeyBindsLoaded                    keyBinds
+  Event_OnKeyBindsSaved                     keyBinds
+  Event_OnKeyBindRebindStart
+  Event_OnKeyBindRebindComplete
+  Event_OnKeyBindRebindCancel
+
+Other Events
+------------
+  Event_Server_OnChatCommand                clientId, command, args
+  Event_OnServerStateChanged                oldServerState, newServerState
+  Event_OnBaseCameraStarted
+  Event_OnBaseCameraDestroyed
+  Event_OnBaseCameraEnabled
+  Event_OnBaseCameraDisabled
+  Event_OnModPreviewLinkClicked             id

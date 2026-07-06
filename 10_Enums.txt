@@ -1,0 +1,99 @@
+Enums
+=====
+
+Player Enums
+------------
+  PlayerPhase { None, TeamSelect, PositionSelect, Play, Replay, Spectate }
+
+  PlayerPhase indicates where the player is in the game flow:
+    - None: Not yet in a game or connecting
+    - TeamSelect: Choosing a team (Blue/Red/Spectator)
+    - PositionSelect: Choosing a role (Attacker/Goalie)
+    - Play: Actively on the field playing
+    - Replay: Watching a goal replay
+    - Spectate: Spectating (not playing)
+
+  PlayerTeam { None, Blue, Red, Spectator }
+
+  PlayerRole { None, Attacker, Goalie }
+
+  PlayerHandedness { None, Left, Right }
+
+  Handedness affects which side the player holds their stick. Left-handed
+  players hold the stick with their left hand lower.
+
+Game Enums
+----------
+  GamePhase { None, Warmup, PreGame, FaceOff, Play, BlueScore, RedScore,
+              Replay, Intermission, GameOver, PostGame }
+
+  Represents the current state of the match (see GameMode System for details).
+
+  ApplicationQuality { Low, Medium, High, Ultra }
+  ShadowQuality { Low, Medium, High }
+  Units { Metric, Imperial }
+
+Server/Connection Enums
+-----------------------
+  ConnectionPhase
+    Stages of establishing a connection to a server.
+
+  ConnectionRejectionCode { ... }
+    Reasons a connection request was rejected (wrong version, missing mods, etc.).
+
+  DisconnectionCode { ... }
+    Reasons for disconnection (timeout, kicked, server shutdown, etc.).
+
+  ReconnectionPhase
+    States during reconnection to a server.
+
+  AuthenticationPhase
+    Stages of Steam authentication during connection.
+
+  TransactionPhase { ... }
+    Phases of Steam workshop item transactions.
+
+  ServerReadinessPhase { None, AwaitingMods, Ready }
+    Server readiness state. While AwaitingMods, the server waits for all mods
+    to load and enable.
+
+  SteamWorkshopItemPhase { ... }
+    States of a Steam workshop item being downloaded/installed.
+
+UI Enums
+--------
+  UIPhase { ... }
+    Overall UI state machine phase.
+
+  AppearanceCategory { ... }
+    Categories in the appearance customization screen.
+
+  AppearanceSubcategory { ... }
+    Subcategories within each appearance category.
+
+  QuickChatCategory { ... }
+    Categories of quick chat messages (e.g., Compliments, Tactical, etc.).
+
+  HeadgearRole { ... }
+    Which player role a headgear item is for (Attacker/Goalie/Any).
+
+  JerseyTeam { ... }
+    Which team a jersey item is for (Blue/Red/Any).
+
+  StickSkinTeam { ... }
+    Which team a stick skin is for (Blue/Red/Any).
+
+  PlayerLegPadState { ... }
+    Visual state of player leg pads (on/off).
+
+  AvatarSize { ... }
+    Size options for player avatars in UI (Small, Medium, Large).
+
+Item Enums
+----------
+  Item categories (used as strings in Item.categories[]):
+    "flag", "headgear", "mustache", "beard", "jersey", "stickSkin",
+    "stickShaftTape", "stickBladeTape", "attacker", "goalie", "unlisted"
+
+  Items can belong to multiple categories. For example, a headgear might be
+  tagged with both "headgear" and "goalie" to indicate it's goalie-only.

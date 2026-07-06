@@ -1,0 +1,254 @@
+Examples
+========
+
+Example: Simple Plugin
+----------------------
+  using Puck;
+
+  class MyMod : IPuckPlugin
+  {
+      bool OnEnable()
+      {
+          EventManager.AddEventListener("Event_Everyone_OnPlayerSpawned", OnPlayerSpawned);
+          EventManager.AddEventListener("Event_Everyone_OnGoalScored", OnGoalScored);
+          return true;
+      }
+
+      bool OnDisable()
+      {
+          EventManager.RemoveEventListener("Event_Everyone_OnPlayerSpawned", OnPlayerSpawned);
+          EventManager.RemoveEventListener("Event_Everyone_OnGoalScored", OnGoalScored);
+          return true;
+      }
+
+      void OnPlayerSpawned(Dictionary<string, object> message)
+      {
+          Player player = (Player)message["player"];
+          Debug.Log($"Player {player.Username.Value} spawned on team {player.Team}");
+      }
+
+      void OnGoalScored(Dictionary<string, object> message)
+      {
+          Debug.Log("Goal scored!");
+      }
+  }
+
+Example: Harmony Patch
+----------------------
+  using HarmonyLib;
+  using Puck;
+  using UnityEngine;
+
+  class MyPatcher : IPuckPlugin
+  {
+      private Harmony harmony;
+
+      bool OnEnable()
+      {
+          harmony = new Harmony("com.example.mymod");
+          harmony.PatchAll();
+          return true;
+      }
+
+      bool OnDisable()
+      {
+          harmony?.UnpatchAll(harmony.Id);
+          return true;
+      }
+  }
+
+  [HarmonyPatch(typeof(Puck), nameof(Puck.OnCollisionEnter))]
+  class PuckCollisionPatch
+  {
+      static void Postfix(Puck __instance, Collision collision)
+      {
+          if (collision.gameObject.TryGetComponent<PlayerBody>(out var body))
+          {
+              Debug.Log($"Puck hit player {body.Player.Username.Value}!");
+          }
+      }
+  }
+
+Example: Custom Game Mode
+-------------------------
+  using Puck;
+
+  class MyGameModeConfig : StandardGameModeConfig
+  {
+      int MyCustomSetting = 5;
+  }
+
+  class MyGameMode : StandardGameMode<MyGameModeConfig>
+  {
+      MyGameMode() : base("myconfig.json") { }
+
+      protected override void OnPlayStarted()
+      {
+          base.OnPlayStarted();
+          Debug.Log($"My custom setting: {Config.MyCustomSetting}");
+      }
+
+      protected override void OnGoalScored(Dictionary<string, object> message)
+      {
+          // Custom goal logic
+          base.OnGoalScored(message);
+      }
+  }
+
+Example: Popup Settings Panel
+----------------------------
+  class MyPopupContent : BasePopupContent
+  {
+      MyPopupContent() : base(null) { }
+      override void Initialize()
+      {
+          var root = new VisualElement();
+          root.style.minWidth = 300;
+          var toggle = new Toggle("Enable Feature") { value = true };
+          root.Add(toggle);
+          VisualElement = root;
+          Initialized?.Invoke();
+      }
+  }
+
+  // Show it:
+  UIManager.Instance.PopupManager.ShowPopup(
+      "myModPopup", "MY MOD", new MyPopupContent(),
+      showOkButton: false, showCloseButton: true);
+
+Example: Popup with Sliders and SaveManager
+-------------------------------------------
+  class SettingsContent : BasePopupContent
+  {
+      private Slider _volumeSlider;
+
+      public SettingsContent() : base(null) { }
+
+      public override void Initialize()
+      {
+          var root = new VisualElement();
+          root.style.minWidth = 320;
+          root.style.paddingLeft = 14;
+          root.style.paddingRight = 14;
+
+          // Load saved value
+          float saved = SaveManager.GetFloat("myMod_volume", 0.5f);
+
+          _volumeSlider = new Slider("Volume", 0f, 1f) { value = saved };
+          _volumeSlider.RegisterValueChangedCallback(evt =>
+          {
+              SaveManager.SetFloat("myMod_volume", evt.newValue);
+          });
+          root.Add(_volumeSlider);
+
+          VisualElement = root;
+          Initialized?.Invoke();
+      }
+  }
+
+Example: In-Game Proximity Check
+--------------------------------
+  var local = PlayerManager.Instance.GetLocalPlayer();
+  if (local?.PlayerBody == null) return;
+  Vector3 myPos = local.PlayerBody.transform.position;
+  foreach (var p in PlayerManager.Instance.GetPlayers())
+  {
+      if (p == local || p.PlayerBody == null) continue;
+      float dist = Vector3.Distance(myPos, p.PlayerBody.transform.position);
+      if (dist < 2f) Debug.Log($"{p.Username.Value} is {dist:F1}m away!");
+  }
+
+This pattern is useful for proximity-based mods (vignettes, sounds, effects).
+Wrap in Update() or a coroutine to check continuously.
+
+Example: Reading Player Stats
+-----------------------------
+  class StatsReader : IPuckPlugin
+  {
+      bool OnEnable()
+      {
+          EventManager.AddEventListener("Event_Everyone_OnPlayerSpawned", OnPlayerSpawned);
+          return true;
+      }
+
+      bool OnDisable()
+      {
+          EventManager.RemoveEventListener("Event_Everyone_OnPlayerSpawned", OnPlayerSpawned);
+          return true;
+      }
+
+      void OnPlayerSpawned(Dictionary<string, object> msg)
+      {
+          Player p = (Player)msg["player"];
+          Debug.Log($"{p.Username.Value} (#{p.Number.Value}) | " +
+                    $"Team: {p.Team}, Role: {p.Role}, " +
+                    $"Goals: {p.Goals.Value}, Assists: {p.Assists.Value}, " +
+                    $"Ping: {p.Ping.Value}ms, " +
+                    $"Steam: {p.SteamId.Value}");
+      }
+  }
+
+Example: Logging Puck Speed
+---------------------------
+  class Speedometer : IPuckPlugin
+  {
+      private Puck puck;
+
+      bool OnEnable()
+      {
+          EventManager.AddEventListener("Event_Everyone_OnPuckSpawned", OnPuckSpawned);
+          EventManager.AddEventListener("Event_Everyone_OnPuckDespawned", OnPuckDespawned);
+          return true;
+      }
+
+      bool OnDisable()
+      {
+          EventManager.RemoveEventListener("Event_Everyone_OnPuckSpawned", OnPuckSpawned);
+          EventManager.RemoveEventListener("Event_Everyone_OnPuckDespawned", OnPuckDespawned);
+          return true;
+      }
+
+      void OnPuckSpawned(Dictionary<string, object> msg)
+      {
+          puck = (Puck)msg["puck"];
+      }
+
+      void OnPuckDespawned(Dictionary<string, object> msg)
+      {
+          puck = null;
+      }
+
+      // Call from Update via Harmony or MonoBehaviour
+      void Update()
+      {
+          if (puck != null)
+              Debug.Log($"Puck speed: {puck.Speed:F1} / {puck.MaxSpeed}");
+      }
+  }
+
+Example: Button Injection with Harmony
+--------------------------------------
+  [HarmonyPatch]
+  class InjectButtonsPatch
+  {
+      [HarmonyTargetMethod]
+      static MethodBase Target() => typeof(UIMainMenu).GetMethod("Show", Type.EmptyTypes);
+
+      [HarmonyPostfix]
+      static void AfterShow(UIMainMenu __instance)
+      {
+          var settingsField = typeof(UIMainMenu)
+              .GetField("settingsButton", BindingFlags.Instance | BindingFlags.NonPublic);
+          var settingsBtn = settingsField.GetValue(__instance) as Button;
+          if (settingsBtn?.parent == null) return;
+
+          var container = settingsBtn.parent;
+          var myBtn = new Button(() => Debug.Log("My mod button clicked!"))
+          {
+              text = "MY MOD BUTTON"
+          };
+          foreach (string cls in settingsBtn.GetClasses())
+              myBtn.AddToClassList(cls);
+          container.Add(myBtn);
+      }
+  }
