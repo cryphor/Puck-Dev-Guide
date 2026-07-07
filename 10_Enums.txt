@@ -30,64 +30,86 @@ Game Enums
   Represents the current state of the match (see GameMode System for details).
 
   ApplicationQuality { Low, Medium, High, Ultra }
-  ShadowQuality { Low, Medium, High }
+  ShadowQuality { Low, Medium, High, Ultra }
   Units { Metric, Imperial }
 
 Server/Connection Enums
 -----------------------
-  ConnectionPhase
+  ConnectionPhase { Disconnected, Connecting, Connected }
     Stages of establishing a connection to a server.
 
-  ConnectionRejectionCode { ... }
-    Reasons a connection request was rejected (wrong version, missing mods, etc.).
+  ConnectionRejectionCode { Unreachable, ServerFull, TimedOut, Banned, NotWhitelisted, MissingPassword, InvalidPassword, MissingMods, ServerStarting, Unknown }
+    Reasons a connection request was rejected.
 
-  DisconnectionCode { ... }
-    Reasons for disconnection (timeout, kicked, server shutdown, etc.).
+  DisconnectionCode { ConnectionLost, Disconnected, Kicked, Banned }
+    Reasons for disconnection (timeout, kicked, etc.).
 
-  ReconnectionPhase
+  ReconnectionPhase { None, AwaitingPassword, AwaitingMods }
     States during reconnection to a server.
 
-  AuthenticationPhase
+  AuthenticationPhase { None, Authenticating, Authenticated }
     Stages of Steam authentication during connection.
 
-  TransactionPhase { ... }
+  TransactionPhase { None, Starting, Started }
     Phases of Steam workshop item transactions.
 
-  ServerReadinessPhase { None, AwaitingMods, Ready }
-    Server readiness state. While AwaitingMods, the server waits for all mods
-    to load and enable.
+  ServerReadinessPhase { NotReady, Starting, Ready }
+    Server readiness state. Starting while mods are loading, Ready once done.
 
-  SteamWorkshopItemPhase { ... }
+  SteamWorkshopItemPhase { None, Downloading, Updating, Installed }
     States of a Steam workshop item being downloaded/installed.
 
 UI Enums
 --------
-  UIPhase { ... }
+  UIPhase { None, LockerRoom, Playing }
     Overall UI state machine phase.
 
-  AppearanceCategory { ... }
+  AppearanceCategory { Head, Body, Stick }
     Categories in the appearance customization screen.
 
-  AppearanceSubcategory { ... }
+  AppearanceSubcategory { Headgear, Flags, Mustaches, Beards, Jerseys, StickSkins, StickShaftTapes, StickBladeTapes }
     Subcategories within each appearance category.
 
-  QuickChatCategory { ... }
-    Categories of quick chat messages (e.g., Compliments, Tactical, etc.).
+  QuickChatCategory { Information, Compliments, Reactions, Apologies, Emojis }
+    Categories of quick chat messages.
 
-  HeadgearRole { ... }
-    Which player role a headgear item is for (Attacker/Goalie/Any).
+  HeadgearRole { Attacker = 1, Goalie = 2, Any = 4 }
+    Which player role a headgear item is for (flags-based).
 
-  JerseyTeam { ... }
-    Which team a jersey item is for (Blue/Red/Any).
+  JerseyTeam { Blue = 1, Red = 2, Any = 4 }
+    Which team a jersey item is for (flags-based).
 
-  StickSkinTeam { ... }
-    Which team a stick skin is for (Blue/Red/Any).
+  StickSkinTeam { Blue = 1, Red = 2, Any = 4 }
+    Which team a stick skin is for (flags-based).
 
-  PlayerLegPadState { ... }
-    Visual state of player leg pads (on/off).
+  PlayerLegPadState { Idle, Butterfly, ButterflyExtended }
+    Visual state of player leg pads.
 
   AvatarSize { ... }
     Size options for player avatars in UI (Small, Medium, Large).
+
+Other Enums
+-----------
+  CameraType { None, LockerRoom, Cinematic, BluePositionSelection, RedPositionSelection, Player, Replay, Spectator }
+    Active camera type, accessible via CameraManager.ActiveCameraType.
+
+  KeyBindInteraction { Press, Release, DoublePress, Hold, Continuous, Toggle }
+    How a key bind activates.
+
+  KeyBindInteractionType { Press, Hold }
+    Simplified key bind interaction type.
+
+  HierarchyChangeType { AddedToParent, RemovedFromParent, ChildrenReordered, AttachedToPanel, DetachedFromPanel }
+    UI Toolkit hierarchy change event types.
+
+  DeploymentProvider { None, Edgegap, PuckOrchestrator }
+    Dedicated server deployment provider.
+
+  DerivativeMeasurement { Velocity, ErrorRateOfChange }
+    PID controller derivative measurement mode.
+
+  TCPServerMessageType { PreviewRequest, PreviewResponse }
+    LAN server browser message types.
 
 Item Enums
 ----------

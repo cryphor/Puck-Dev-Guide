@@ -109,12 +109,12 @@ specific client IDs.
 
 ChatMessage
 -----------
-  struct ChatMessage : INetworkSerializable
+  class ChatMessage : INetworkSerializable, IEquatable<ChatMessage>
   {
-      FixedString32Bytes SteamID;
-      FixedString32Bytes Username;
+      FixedString32Bytes? SteamID;
+      FixedString32Bytes? Username;
       PlayerTeam? Team;
-      FixedString32Bytes Content;
+      FixedString512Bytes Content;
       double Timestamp;
       bool IsQuickChat;
       bool IsTeamChat;
